@@ -312,6 +312,8 @@ function renderTreemap() {
   const colors = ["#0f172a"];
   const texts  = [""];
 
+  let rootTotal = 0;
+
   DATA.teilplaene.forEach(tp => {
     const sk = tp.aufwendungen_nach_steuerung;
     let tpTotal = 0;
@@ -324,6 +326,7 @@ function renderTreemap() {
     });
 
     if (tpTotal <= 0) return;
+    rootTotal += tpTotal;
 
     const tpId = "tp_" + tp.tp_nr;
     ids.push(tpId);
@@ -345,6 +348,8 @@ function renderTreemap() {
       texts.push(fmtMio(val));
     });
   });
+
+  values[0] = rootTotal;
 
   Plotly.newPlot("chart-treemap", [{
     type: "treemap",
