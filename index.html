@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="de" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Haushaltsplan Stadt Suhl 2025 – Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+  :root { color-scheme: dark; }
+  body { background: #0f172a; color: #e2e8f0; font-family: 'Inter', system-ui, sans-serif; }
+  .card { background: #1e293b; border: 1px solid #334155; border-radius: 0.75rem; }
+  .kpi-value { font-size: 1.6rem; font-weight: 700; line-height: 1.2; }
+  .kpi-label { font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; }
+  .tag { display: inline-block; font-size: 0.65rem; font-weight: 600; padding: 2px 7px; border-radius: 9999px; }
+  .tag-frei { background: #064e3b; color: #34d399; }
+  .tag-ermessen { background: #1e3a5f; color: #60a5fa; }
+  .tag-strikt { background: #3b1f2b; color: #f87171; }
+  .tag-uebertragen { background: #3b2f00; color: #fbbf24; }
+  .tag-unbekannt { background: #1e293b; color: #94a3b8; }
+  input[type=range] { accent-color: #60a5fa; }
+  .slider-row { display: grid; grid-template-columns: 1fr 120px 90px; gap: 0.5rem; align-items: center; }
+  .warn-box { background: #431407; border: 1px solid #ea580c; border-radius: 0.5rem; padding: 0.75rem 1rem; }
+  .section-title { font-size: 1.125rem; font-weight: 600; color: #cbd5e1; margin-bottom: 1rem; }
+  .toggle-btn { cursor: pointer; user-select: none; }
+  #sim-ergebnis { transition: color 0.3s; }
+  .plotly-chart { min-height: 380px; }
+  .tabbar { display: flex; gap: 0.25rem; border-bottom: 1px solid #334155; margin-bottom: 1.5rem; }
+  .tab { padding: 0.5rem 1rem; cursor: pointer; border-bottom: 2px solid transparent; color: #94a3b8; font-size: 0.875rem; }
+  .tab.active { border-bottom-color: #60a5fa; color: #e2e8f0; }
+  .note { font-size: 0.75rem; color: #64748b; }
+</style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+
+<!-- ─── HEADER ──────────────────────────────────────────────────────────── -->
+<div class="mb-6">
+  <h1 class="text-2xl font-bold text-slate-100">Haushaltsplan Stadt Suhl 2025</h1>
+  <p class="text-slate-400 text-sm mt-1">Interaktives Analyse-Dashboard · kommunale Doppik (ThürKDG)</p>
+</div>
+
+<!-- ─── KPI CARDS ──────────────────────────────────────────────────────── -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8" id="kpi-cards">
+  <div class="card p-4">
+    <div class="kpi-label">Gesamterträge</div>
+    <div class="kpi-value text-emerald-400" id="kpi-ertraege">–</div>
+    <div class="note mt-1">Haushaltssatzung 2025</div>
+  </div>
+  <div class="card p-4">
+    <div class="kpi-label">Gesamtaufwendungen</div>
+    <div class="kpi-value text-rose-400" id="kpi-aufwendungen">–</div>
+    <div class="note mt-1">Haushaltssatzung 2025</div>
+  </div>
+  <div class="card p-4">
+    <div class="kpi-label">Jahresergebnis</div>
+    <div class="kpi-value text-amber-400" id="kpi-ergebnis">–</div>
+    <div class="note mt-1">Plandefizit</div>
+  </div>
+  <div class="card p-4">
+    <div class="kpi-label">Einwohner (Schätzung)</div>
+    <div class="kpi-value text-sky-400">~35.000</div>
+    <div class="note mt-1">Pro-Kopf Aufwand ~<span id="kpi-prokopf">–</span> €</div>
+  </div>
+</div>
+
+<!-- ─── TABS ──────────────────────────────────────────────────────────── -->
+<div class="tabbar" id="tabbar">
+  <div class="tab active" data-tab="overview">Überblick</div>
+  <div class="tab" data-tab="zeitreihe">Zeitreihe</div>
+  <div class="tab" data-tab="simulator">Konsolidierungs-Simulator</div>
+</div>
+
+<!-- ══════════ TAB: ÜBERBLICK ══════════ -->
+<div id="tab-overview">
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+
+    <!-- Sankey -->
+    <div class="card p-5">
+      <div class="section-title">Mittelfluss: Ertragsquellen → Teilpläne</div>
+      <div id="chart-sankey" class="plotly-chart"></div>
+    </div>
+
+    <!-- Treemap -->
+    <div class="card p-5">
+      <div class="flex items-center justify-between mb-3">
+        <div class="section-title mb-0">Aufwendungen nach Teilplan & Steuerungstyp</div>
+        <label class="toggle-btn flex items-center gap-2 text-sm text-slate-400">
+          <input type="checkbox" id="toggle-gestaltbar" class="accent-blue-400">
+          <span>Nur gestaltbar</span>
+        </label>
+      </div>
+      <div id="chart-treemap" class="plotly-chart"></div>
+      <div class="note mt-2">Farbe: grün = freiwillig · blau = Ermessenspflicht · rot = Striktpflicht · gelb = Übertragen</div>
+    </div>
+
+  </div>
+
+  <!-- Balkendiagramm Teilpläne -->
+  <div class="card p-5 mb-6">
+    <div class="section-title">Saldo (Erträge − Aufwendungen) je Teilplan 2025</div>
+    <div id="chart-bar-tp" class="plotly-chart" style="min-height:320px;"></div>
+  </div>
+</div>
+
+<!-- ══════════ TAB: ZEITREIHE ══════════ -->
+<div id="tab-zeitreihe" class="hidden">
+  <div class="card p-5 mb-6">
+    <div class="section-title">Erträge & Aufwendungen 2023–2028</div>
+    <div id="chart-zeitreihe" class="plotly-chart" style="min-height:420px;"></div>
+    <div class="note mt-2">Schraffiert = Finanzplanung (Prognose). Quelle: Haushaltsplan Suhl 2025</div>
+  </div>
+</div>
+
+<!-- ══════════ TAB: SIMULATOR ══════════ -->
+<div id="tab-simulator" class="hidden">
+
+  <div class="card p-5 mb-6">
+    <div class="section-title">Haushaltskonsolidierungs-Simulator</div>
+    <p class="text-slate-400 text-sm mb-4">
+      Verschiebe die Regler, um Kürzungsszenarien zu modellieren. Pflichtaufgaben (strikt) sind gesperrt.
+      Das Jahresergebnis aktualisiert sich in Echtzeit.
+    </p>
+
+    <!-- Ergebnis-Banner -->
+    <div class="card p-4 mb-6 flex items-center justify-between flex-wrap gap-4">
+      <div>
+        <div class="kpi-label">Simuliertes Jahresergebnis 2025</div>
+        <div class="kpi-value" id="sim-ergebnis">–</div>
+      </div>
+      <div>
+        <div class="kpi-label">Einsparung gegenüber Plan</div>
+        <div class="kpi-value text-emerald-400" id="sim-einsparung">–</div>
+      </div>
+      <button onclick="resetSimulator()" class="text-sm px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg">
+        Zurücksetzen
+      </button>
+    </div>
+
+    <!-- Wechselwirkung Warning -->
+    <div class="warn-box mb-6 hidden" id="wwk-warning">
+      <div class="font-semibold text-orange-400 mb-1">⚠ Präventions-Kosten-Spirale aktiviert</div>
+      <div class="text-sm text-orange-200" id="wwk-text"></div>
+    </div>
+
+    <!-- Filter -->
+    <div class="flex gap-4 items-center mb-5 flex-wrap">
+      <span class="text-sm text-slate-400">Teilplan:</span>
+      <select id="sim-filter-tp" class="bg-slate-700 border border-slate-600 text-sm rounded px-3 py-1.5">
+        <option value="">Alle Teilpläne</option>
+      </select>
+      <span class="text-sm text-slate-400">Steuerungstyp:</span>
+      <select id="sim-filter-sk" class="bg-slate-700 border border-slate-600 text-sm rounded px-3 py-1.5">
+        <option value="">Alle Typen</option>
+        <option value="FREIWILLIG">Freiwillig</option>
+        <option value="PFLICHT_ERMESSEN">Pflicht (Ermessen)</option>
+      </select>
+    </div>
+
+    <!-- Slider-Liste -->
+    <div id="sim-liste" class="space-y-3"></div>
+  </div>
+</div>
+
+<!-- ─── FOOTER ─────────────────────────────────────────────────────────── -->
+<div class="mt-8 text-center note">
+  Datenquelle: Haushaltsplan Stadt Suhl 2025 (öffentliches Dokument) ·
+  Generiert mit Cortex AI Solutions ·
+  <span id="generiert-am"></span>
+</div>
+
+<!-- ══════════ JAVASCRIPT ══════════ -->
+<script>
+"use strict";
+
+// ── Utilities ──────────────────────────────────────────────────────────────
+const fmt = (n, frac=0) => new Intl.NumberFormat("de-DE", { maximumFractionDigits: frac, minimumFractionDigits: frac }).format(n);
+const fmtEur = (n) => fmt(n) + " €";
+const fmtMio = (n) => fmt(n / 1_000_000, 2) + " Mio. €";
+
+const DARK_LAYOUT = {
+  paper_bgcolor: "rgba(0,0,0,0)",
+  plot_bgcolor:  "rgba(0,0,0,0)",
+  font: { color: "#cbd5e1", family: "Inter, system-ui, sans-serif", size: 12 },
+  margin: { t: 20, b: 40, l: 10, r: 10 },
+};
+const CFG = { responsive: true, displayModeBar: false };
+
+const SK_COLOR = {
+  "FREIWILLIG":       "#10b981",
+  "PFLICHT_ERMESSEN": "#3b82f6",
+  "PFLICHT_STRIKT":   "#ef4444",
+  "UEBERTRAGEN":      "#f59e0b",
+  "unbekannt":        "#64748b",
+};
+const SK_LABEL = {
+  "FREIWILLIG":       "Freiwillig",
+  "PFLICHT_ERMESSEN": "Pflicht (Ermessen)",
+  "PFLICHT_STRIKT":   "Pflicht (Strikt)",
+  "UEBERTRAGEN":      "Übertragen",
+  "unbekannt":        "Nicht kategorisiert",
+};
+
+// ── Simulator state ────────────────────────────────────────────────────────
+let DATA = null;
+let simState = {};   // produkt_nummer → kuerzung_pct (0–max)
+
+// ── Boot ──────────────────────────────────────────────────────────────────
+fetch("budget_data.json")
+  .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then(d => { DATA = d; init(); })
+  .catch(e => {
+    document.body.innerHTML = `<div class="p-8 text-red-400 text-lg">
+      Fehler beim Laden von budget_data.json: ${e.message}<br>
+      <span class="text-sm text-slate-400">Bitte sicherstellen, dass generate_json.py ausgeführt wurde und die Datei im selben Ordner liegt.</span>
+    </div>`;
+  });
+
+function init() {
+  renderKPI();
+  renderSankey();
+  renderTreemap();
+  renderBarTP();
+  renderZeitreihe();
+  initSimulator();
+  setupTabs();
+  document.getElementById("toggle-gestaltbar").addEventListener("change", renderTreemap);
+  document.getElementById("generiert-am").textContent = "Stand: " + new Date(DATA.meta.generiert_am).toLocaleDateString("de-DE");
+}
+
+// ── KPI ───────────────────────────────────────────────────────────────────
+function renderKPI() {
+  const m = DATA.meta;
+  document.getElementById("kpi-ertraege").textContent     = fmtMio(m.ertraege_soll);
+  document.getElementById("kpi-aufwendungen").textContent = fmtMio(m.aufwendungen_soll);
+  const erg = m.jahresergebnis_soll;
+  const el = document.getElementById("kpi-ergebnis");
+  el.textContent = fmtMio(erg);
+  el.className = "kpi-value " + (erg < 0 ? "text-rose-400" : "text-emerald-400");
+  document.getElementById("kpi-prokopf").textContent = fmt(m.aufwendungen_soll / 35000, 0);
+}
+
+// ── SANKEY ────────────────────────────────────────────────────────────────
+function renderSankey() {
+  const eq = DATA.ertragsquellen;
+  const tp = DATA.teilplaene;
+
+  // Quellen: 0..n-1
+  const srcLabels = eq.map(e => e.gruppe);
+  // Ziele: n..n+m-1
+  const tpLabels  = tp.map(t => t.tp_name.replace(" & ", " &\n"));
+
+  const nSrc = srcLabels.length;
+  const nodeLabels = [...srcLabels, ...tpLabels];
+
+  // Farben
+  const srcColors = ["#0f766e","#1d4ed8","#7e22ce","#b45309","#0e7490","#374151"];
+  const tpColors  = tp.map(t => {
+    const sk = t.aufwendungen_nach_steuerung;
+    const tot = Object.values(sk).reduce((a,b)=>a+b,0);
+    if (!tot) return "#334155";
+    const max = Object.entries(sk).sort((a,b)=>b[1]-a[1])[0][0];
+    return SK_COLOR[max] || "#334155";
+  });
+
+  // Gesamt-Erträge der Quellen
+  const totalErtrag = eq.reduce((a,e)=>a+e.betrag_2025,0);
+
+  // Links: jede Ertragsquelle → jeder Teilplan (proportional zu TP-Aufwendungsanteil)
+  const linkSrc = [], linkTgt = [], linkVal = [], linkColor = [];
+  const tpAufwTotal = tp.reduce((a,t)=>a+t.aufwendungen_2025,0);
+
+  eq.forEach((e, si) => {
+    tp.forEach((t, ti) => {
+      const share = tpAufwTotal > 0 ? t.aufwendungen_2025 / tpAufwTotal : 0;
+      const val   = Math.round(e.betrag_2025 * share);
+      if (val > 0) {
+        linkSrc.push(si);
+        linkTgt.push(nSrc + ti);
+        linkVal.push(val);
+        linkColor.push(srcColors[si % srcColors.length] + "55");
+      }
+    });
+  });
+
+  Plotly.newPlot("chart-sankey", [{
+    type: "sankey",
+    orientation: "h",
+    node: {
+      label: nodeLabels,
+      color: [...srcColors.slice(0, nSrc), ...tpColors],
+      thickness: 18,
+      pad: 10,
+      line: { color: "#1e293b", width: 0.5 },
+    },
+    link: { source: linkSrc, target: linkTgt, value: linkVal, color: linkColor },
+  }], {
+    ...DARK_LAYOUT,
+    margin: { t: 10, b: 10, l: 10, r: 10 },
+    height: 380,
+  }, CFG);
+}
+
+// ── TREEMAP ───────────────────────────────────────────────────────────────
+function renderTreemap() {
+  const onlyGestaltbar = document.getElementById("toggle-gestaltbar").checked;
+  const SK_CODES = ["FREIWILLIG","PFLICHT_ERMESSEN","PFLICHT_STRIKT","UEBERTRAGEN","unbekannt"];
+
+  const ids    = ["ROOT"];
+  const labels = ["Aufwendungen 2025"];
+  const parents= [""];
+  const values = [0];
+  const colors = ["#0f172a"];
+  const texts  = [""];
+
+  DATA.teilplaene.forEach(tp => {
+    const sk = tp.aufwendungen_nach_steuerung;
+    let tpTotal = 0;
+
+    SK_CODES.forEach(code => {
+      const val = sk[code] || 0;
+      if (onlyGestaltbar && (code === "PFLICHT_STRIKT" || code === "UEBERTRAGEN")) return;
+      if (val <= 0) return;
+      tpTotal += val;
+    });
+
+    if (tpTotal <= 0) return;
+
+    const tpId = "tp_" + tp.tp_nr;
+    ids.push(tpId);
+    labels.push(tp.tp_name);
+    parents.push("ROOT");
+    values.push(tpTotal);
+    colors.push("#1e3a5f");
+    texts.push(fmtMio(tpTotal));
+
+    SK_CODES.forEach(code => {
+      const val = sk[code] || 0;
+      if (onlyGestaltbar && (code === "PFLICHT_STRIKT" || code === "UEBERTRAGEN")) return;
+      if (val <= 0) return;
+      ids.push(tpId + "_" + code);
+      labels.push(SK_LABEL[code]);
+      parents.push(tpId);
+      values.push(val);
+      colors.push(SK_COLOR[code] || "#64748b");
+      texts.push(fmtMio(val));
+    });
+  });
+
+  Plotly.newPlot("chart-treemap", [{
+    type: "treemap",
+    ids, labels, parents, values,
+    text: texts,
+    textinfo: "label+text",
+    marker: { colors, line: { color: "#0f172a", width: 1 } },
+    hovertemplate: "<b>%{label}</b><br>%{text}<extra></extra>",
+    branchvalues: "total",
+  }], {
+    ...DARK_LAYOUT,
+    height: 380,
+    margin: { t: 10, b: 10, l: 5, r: 5 },
+  }, CFG);
+}
+
+// ── BAR CHART: Saldo je TP ────────────────────────────────────────────────
+function renderBarTP() {
+  const tp = DATA.teilplaene;
+  const names  = tp.map(t => t.tp_name);
+  const saldi  = tp.map(t => t.ertraege_2025 - t.aufwendungen_2025);
+  const colors = saldi.map(s => s >= 0 ? "#10b981" : "#ef4444");
+
+  Plotly.newPlot("chart-bar-tp", [{
+    type: "bar",
+    x: saldi,
+    y: names,
+    orientation: "h",
+    marker: { color: colors },
+    text: saldi.map(fmtMio),
+    textposition: "auto",
+    hovertemplate: "<b>%{y}</b><br>Saldo: %{text}<extra></extra>",
+  }], {
+    ...DARK_LAYOUT,
+    height: 360,
+    xaxis: { tickformat: "~s", gridcolor: "#334155" },
+    yaxis: { automargin: true },
+    margin: { t: 10, b: 50, l: 10, r: 20 },
+  }, CFG);
+}
+
+// ── ZEITREIHE ─────────────────────────────────────────────────────────────
+function renderZeitreihe() {
+  const z = DATA.zeitreihe;
+  const ist  = z.filter(d => !d.ist_prognose);
+  const prog = z.filter(d => d.ist_prognose);
+  // Overlap: letzter IST-Datenpunkt auch als Prognose-Startpunkt
+  const last_ist = ist[ist.length - 1];
+
+  const x_ist  = ist.map(d => d.label);
+  const x_prog = [last_ist.label, ...prog.map(d => d.label)];
+
+  const ert_ist  = ist.map(d => d.ertraege);
+  const auw_ist  = ist.map(d => d.aufwendungen);
+  const ert_prog = [last_ist.ertraege, ...prog.map(d => d.ertraege)];
+  const auw_prog = [last_ist.aufwendungen, ...prog.map(d => d.aufwendungen)];
+
+  const traces = [
+    {
+      name: "Erträge (Ist/Plan)",
+      x: x_ist, y: ert_ist,
+      mode: "lines+markers",
+      line: { color: "#10b981", width: 2.5 },
+      marker: { size: 7 },
+      hovertemplate: "Erträge: %{y:,.0f} €<extra></extra>",
+    },
+    {
+      name: "Aufwendungen (Ist/Plan)",
+      x: x_ist, y: auw_ist,
+      mode: "lines+markers",
+      line: { color: "#ef4444", width: 2.5 },
+      marker: { size: 7 },
+      hovertemplate: "Aufwendungen: %{y:,.0f} €<extra></extra>",
+    },
+    {
+      name: "Erträge (Prognose)",
+      x: x_prog, y: ert_prog,
+      mode: "lines+markers",
+      line: { color: "#10b981", width: 2, dash: "dot" },
+      marker: { size: 6, symbol: "circle-open" },
+      showlegend: false,
+      hovertemplate: "Erträge (Prog.): %{y:,.0f} €<extra></extra>",
+    },
+    {
+      name: "Aufwendungen (Prognose)",
+      x: x_prog, y: auw_prog,
+      mode: "lines+markers",
+      line: { color: "#ef4444", width: 2, dash: "dot" },
+      marker: { size: 6, symbol: "circle-open" },
+      showlegend: false,
+      hovertemplate: "Aufwendungen (Prog.): %{y:,.0f} €<extra></extra>",
+    },
+  ];
+
+  Plotly.newPlot("chart-zeitreihe", traces, {
+    ...DARK_LAYOUT,
+    height: 420,
+    xaxis: { gridcolor: "#334155" },
+    yaxis: { tickformat: "~s", gridcolor: "#334155", title: "Euro" },
+    legend: { orientation: "h", y: -0.15 },
+    shapes: [{
+      type: "rect",
+      xref: "x", yref: "paper",
+      x0: last_ist.label, x1: x_prog[x_prog.length - 1],
+      y0: 0, y1: 1,
+      fillcolor: "#f59e0b18",
+      line: { width: 0 },
+    }],
+    margin: { t: 10, b: 60, l: 70, r: 20 },
+  }, CFG);
+}
+
+// ── SIMULATOR ─────────────────────────────────────────────────────────────
+function initSimulator() {
+  // Populate TP filter
+  const tpSel = document.getElementById("sim-filter-tp");
+  const tpSet = [...new Set(DATA.simulator_produkte.map(p => p.tp_nr))].sort();
+  tpSet.forEach(nr => {
+    const p = DATA.simulator_produkte.find(x => x.tp_nr === nr);
+    if (!p) return;
+    const opt = document.createElement("option");
+    opt.value = nr;
+    opt.textContent = p.tp_name;
+    tpSel.appendChild(opt);
+  });
+
+  // Init state
+  DATA.simulator_produkte.forEach(p => { simState[p.produkt_nummer] = 0; });
+
+  tpSel.addEventListener("change", renderSimListe);
+  document.getElementById("sim-filter-sk").addEventListener("change", renderSimListe);
+  renderSimListe();
+  updateSimErgebnis();
+}
+
+function renderSimListe() {
+  const filterTP = document.getElementById("sim-filter-tp").value;
+  const filterSK = document.getElementById("sim-filter-sk").value;
+  const liste = document.getElementById("sim-liste");
+  liste.innerHTML = "";
+
+  let produkte = DATA.simulator_produkte;
+  if (filterTP) produkte = produkte.filter(p => p.tp_nr === filterTP);
+  if (filterSK) produkte = produkte.filter(p => p.steuerungs_code === filterSK);
+
+  if (produkte.length === 0) {
+    liste.innerHTML = '<div class="text-slate-500 text-sm">Keine Produkte für diesen Filter.</div>';
+    return;
+  }
+
+  produkte.forEach(p => {
+    const locked = p.max_kuerzung_pct === 0;
+    const cur    = simState[p.produkt_nummer] || 0;
+
+    const div = document.createElement("div");
+    div.className = "card p-3";
+    div.innerHTML = `
+      <div class="flex items-start justify-between gap-2 mb-2">
+        <div>
+          <span class="font-medium text-sm text-slate-200">${escHtml(p.bezeichnung)}</span>
+          <span class="ml-2 text-xs text-slate-500">${p.produkt_nummer}</span>
+          <span class="ml-1 tag ${skTagClass(p.steuerungs_code)}">${SK_LABEL[p.steuerungs_code] || p.steuerungs_code}</span>
+        </div>
+        <div class="text-right text-sm shrink-0">
+          <div class="text-slate-400">${fmtMio(p.kk5_2025)}</div>
+        </div>
+      </div>
+      <div class="slider-row">
+        <input type="range" min="0" max="${p.max_kuerzung_pct}" step="1"
+               value="${cur}" ${locked ? "disabled" : ""}
+               data-pnr="${p.produkt_nummer}"
+               oninput="onSlider(this)"
+               class="${locked ? 'opacity-30 cursor-not-allowed' : ''}">
+        <div class="text-sm text-center">
+          <span id="pct-${p.produkt_nummer}" class="${cur > 0 ? 'text-emerald-400' : 'text-slate-400'}">${cur}%</span>
+          ${locked ? '<span class="ml-1 text-xs text-slate-600">gesperrt</span>' : `<span class="text-xs text-slate-600"> / max ${p.max_kuerzung_pct}%</span>`}
+        </div>
+        <div class="text-sm text-right">
+          <span id="sav-${p.produkt_nummer}" class="text-emerald-400">${cur > 0 ? '−'+fmtMio(p.kk5_2025 * cur / 100) : ''}</span>
+        </div>
+      </div>
+    `;
+    liste.appendChild(div);
+  });
+}
+
+function onSlider(el) {
+  const pnr = el.dataset.pnr;
+  const val = parseInt(el.value);
+  simState[pnr] = val;
+
+  const pctEl = document.getElementById("pct-" + pnr);
+  const savEl = document.getElementById("sav-" + pnr);
+  const prod  = DATA.simulator_produkte.find(p => p.produkt_nummer === pnr);
+
+  pctEl.textContent = val + "%";
+  pctEl.className   = val > 0 ? "text-emerald-400" : "text-slate-400";
+  savEl.textContent = val > 0 ? "−" + fmtMio(prod.kk5_2025 * val / 100) : "";
+
+  updateSimErgebnis();
+  checkWechselwirkungen();
+}
+
+function updateSimErgebnis() {
+  let totalEinsparung = 0;
+  DATA.simulator_produkte.forEach(p => {
+    totalEinsparung += p.kk5_2025 * (simState[p.produkt_nummer] || 0) / 100;
+  });
+
+  const baseErgebnis = DATA.meta.jahresergebnis_soll;
+  const wwkZuschlag  = calcWechselwirkungsZuschlag();
+  const simErgebnis  = baseErgebnis + totalEinsparung - wwkZuschlag;
+
+  const ergEl  = document.getElementById("sim-ergebnis");
+  ergEl.textContent = fmtMio(simErgebnis);
+  ergEl.className   = "kpi-value " + (simErgebnis >= 0 ? "text-emerald-400" : "text-rose-400");
+
+  document.getElementById("sim-einsparung").textContent =
+    totalEinsparung > 0 ? fmtMio(totalEinsparung) : "keine Einsparungen";
+}
+
+function calcWechselwirkungsZuschlag() {
+  let zuschlag = 0;
+  DATA.wechselwirkungen.forEach(wwk => {
+    // Gesamtkürzung der Trigger-Produkte in %
+    let triggerGesamtKK5 = 0;
+    let triggerKuerzungKK5 = 0;
+    wwk.trigger_produkte.forEach(pnr => {
+      const prod = DATA.simulator_produkte.find(p => p.produkt_nummer === pnr);
+      if (!prod) return;
+      triggerGesamtKK5    += prod.kk5_2025;
+      triggerKuerzungKK5  += prod.kk5_2025 * (simState[pnr] || 0) / 100;
+    });
+    const kuerzungPct = triggerGesamtKK5 > 0 ? (triggerKuerzungKK5 / triggerGesamtKK5) * 100 : 0;
+
+    if (kuerzungPct > wwk.trigger_schwelle_pct) {
+      const zielProd = DATA.simulator_produkte.find(p => p.produkt_nummer === wwk.ziel_produkt);
+      if (zielProd) {
+        zuschlag += zielProd.kk5_2025 * wwk.risiko_aufschlag_pct / 100;
+      }
+    }
+  });
+  return zuschlag;
+}
+
+function checkWechselwirkungen() {
+  const warnEl = document.getElementById("wwk-warning");
+  const txtEl  = document.getElementById("wwk-text");
+
+  const active = [];
+  DATA.wechselwirkungen.forEach(wwk => {
+    let total = 0, gekuerzt = 0;
+    wwk.trigger_produkte.forEach(pnr => {
+      const prod = DATA.simulator_produkte.find(p => p.produkt_nummer === pnr);
+      if (!prod) return;
+      total    += prod.kk5_2025;
+      gekuerzt += prod.kk5_2025 * (simState[pnr] || 0) / 100;
+    });
+    const pct = total > 0 ? (gekuerzt / total) * 100 : 0;
+    if (pct > wwk.trigger_schwelle_pct) {
+      const zielProd = DATA.simulator_produkte.find(p => p.produkt_nummer === wwk.ziel_produkt);
+      const zuschlag = zielProd ? zielProd.kk5_2025 * wwk.risiko_aufschlag_pct / 100 : 0;
+      active.push(`${wwk.beschreibung} → Risikozuschlag auf ${zielProd ? zielProd.bezeichnung : wwk.ziel_produkt}: +${fmtMio(zuschlag)}`);
+    }
+  });
+
+  if (active.length > 0) {
+    warnEl.classList.remove("hidden");
+    txtEl.innerHTML = active.map(a => `• ${a}`).join("<br>");
+  } else {
+    warnEl.classList.add("hidden");
+  }
+}
+
+function resetSimulator() {
+  DATA.simulator_produkte.forEach(p => { simState[p.produkt_nummer] = 0; });
+  document.querySelectorAll("#sim-liste input[type=range]").forEach(el => { el.value = 0; });
+  renderSimListe();
+  updateSimErgebnis();
+  checkWechselwirkungen();
+}
+
+// ── TABS ──────────────────────────────────────────────────────────────────
+function setupTabs() {
+  document.querySelectorAll("#tabbar .tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll("#tabbar .tab").forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      const name = tab.dataset.tab;
+      document.getElementById("tab-overview").classList.toggle("hidden", name !== "overview");
+      document.getElementById("tab-zeitreihe").classList.toggle("hidden", name !== "zeitreihe");
+      document.getElementById("tab-simulator").classList.toggle("hidden", name !== "simulator");
+      if (name === "zeitreihe") renderZeitreihe();
+    });
+  });
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function skTagClass(code) {
+  const map = {
+    "FREIWILLIG":       "tag-frei",
+    "PFLICHT_ERMESSEN": "tag-ermessen",
+    "PFLICHT_STRIKT":   "tag-strikt",
+    "UEBERTRAGEN":      "tag-uebertragen",
+  };
+  return map[code] || "tag-unbekannt";
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+</script>
+</body>
+</html>
