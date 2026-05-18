@@ -57,9 +57,9 @@
     <div class="note mt-1">Plandefizit</div>
   </div>
   <div class="card p-4">
-    <div class="kpi-label">Einwohner (Schätzung)</div>
-    <div class="kpi-value text-sky-400">~35.000</div>
-    <div class="note mt-1">Pro-Kopf Aufwand ~<span id="kpi-prokopf">–</span> €</div>
+    <div class="kpi-label">Einwohner (gem. § 30 ThürFAG)</div>
+    <div class="kpi-value text-sky-400">36.307</div>
+    <div class="note mt-1">Per 31.12.2023 · Pro-Kopf Aufwand ~<span id="kpi-prokopf">–</span> €</div>
   </div>
 </div>
 
@@ -236,7 +236,7 @@ function renderKPI() {
   const el = document.getElementById("kpi-ergebnis");
   el.textContent = fmtMio(erg);
   el.className = "kpi-value " + (erg < 0 ? "text-rose-400" : "text-emerald-400");
-  document.getElementById("kpi-prokopf").textContent = fmt(m.aufwendungen_soll / 35000, 0);
+  document.getElementById("kpi-prokopf").textContent = fmt(m.aufwendungen_soll / 36307, 0);
 }
 
 // ── SANKEY ────────────────────────────────────────────────────────────────
