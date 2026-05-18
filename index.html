@@ -309,31 +309,26 @@ function renderTreemap() {
   const labels = ["Aufwendungen 2025"];
   const parents= [""];
   const values = [0];
-  const colors = ["#0f172a"];
+  const colors = ["rgba(0,0,0,0)"];
   const texts  = [""];
-
-  let rootTotal = 0;
 
   DATA.teilplaene.forEach(tp => {
     const sk = tp.aufwendungen_nach_steuerung;
     let tpTotal = 0;
-
     SK_CODES.forEach(code => {
       const val = sk[code] || 0;
       if (onlyGestaltbar && (code === "PFLICHT_STRIKT" || code === "UEBERTRAGEN")) return;
-      if (val <= 0) return;
-      tpTotal += val;
+      if (val > 0) tpTotal += val;
     });
-
     if (tpTotal <= 0) return;
-    rootTotal += tpTotal;
 
     const tpId = "tp_" + tp.tp_nr;
+    // Parent-Knoten bekommt Wert 0 → Plotly berechnet Größe aus Kindern (branchvalues: "remainder")
     ids.push(tpId);
     labels.push(tp.tp_name);
     parents.push("ROOT");
-    values.push(tpTotal);
-    colors.push("#1e3a5f");
+    values.push(0);
+    colors.push("rgba(0,0,0,0)");
     texts.push(fmtMio(tpTotal));
 
     SK_CODES.forEach(code => {
@@ -341,15 +336,13 @@ function renderTreemap() {
       if (onlyGestaltbar && (code === "PFLICHT_STRIKT" || code === "UEBERTRAGEN")) return;
       if (val <= 0) return;
       ids.push(tpId + "_" + code);
-      labels.push(SK_LABEL[code]);
+      labels.push(tp.tp_name + " · " + SK_LABEL[code]);
       parents.push(tpId);
       values.push(val);
       colors.push(SK_COLOR[code] || "#64748b");
       texts.push(fmtMio(val));
     });
   });
-
-  values[0] = rootTotal;
 
   Plotly.newPlot("chart-treemap", [{
     type: "treemap",
@@ -358,7 +351,7 @@ function renderTreemap() {
     textinfo: "label+text",
     marker: { colors, line: { color: "#0f172a", width: 1 } },
     hovertemplate: "<b>%{label}</b><br>%{text}<extra></extra>",
-    branchvalues: "total",
+    branchvalues: "remainder",
   }], {
     ...DARK_LAYOUT,
     height: 380,
