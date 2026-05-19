@@ -169,7 +169,7 @@
   <!-- TP-Aufwendungen Vergleich -->
   <div class="card p-5 mb-6">
     <div class="section-title mb-1">Aufwendungen je Teilplan: <span id="jv-tp-title" class="text-blue-400 font-normal"></span></div>
-    <div class="note mb-3 text-sky-600">← Klicken Sie auf einen Balken für Produktdetails</div>
+    <div class="note mb-3 text-sky-600">Klick auf einen Balken wählt den Teilplan im Detail-Panel unten aus</div>
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-0">
       <div class="lg:col-span-2" id="jv-tp-grouped" style="min-height:380px;"></div>
       <div id="jv-tp-delta" style="min-height:380px;"></div>
@@ -177,12 +177,21 @@
     <div class="note mt-1">Links: Absolutwerte · Rechts: Δ · Grün = gesunken · Rot = gestiegen</div>
   </div>
 
-  <!-- Produkt Drill-Down -->
-  <div class="card p-5 mb-6 hidden" id="jv-drilldown">
-    <div class="flex items-center justify-between mb-3">
-      <div class="section-title mb-0" id="jv-dd-title">Produkt-Vergleich</div>
-      <button onclick="document.getElementById('jv-drilldown').classList.add('hidden')"
-              class="text-slate-400 hover:text-white text-lg leading-none w-8 h-8 flex items-center justify-center rounded hover:bg-slate-700">✕</button>
+  <!-- Produkt Drill-Down (immer sichtbar nach Init) -->
+  <div class="card p-5 mb-6" id="jv-drilldown" style="display:none;">
+    <div class="flex flex-wrap items-center gap-4 mb-3">
+      <div class="section-title mb-0">Produkt-Vergleich</div>
+      <div class="flex items-center gap-2">
+        <label for="jv-tp-select" class="text-xs text-slate-400 uppercase tracking-wider shrink-0">Teilplan:</label>
+        <select id="jv-tp-select"
+                class="bg-slate-700 border border-slate-600 text-sm rounded px-3 py-1.5 text-slate-200"
+                onchange="showJVDrilldown(this.value)">
+        </select>
+      </div>
+    </div>
+    <div class="warn-box mb-3 hidden" id="jv-etl-warn">
+      <div class="font-semibold text-amber-400 mb-1">⚠ ETL-Hinweis: 2024-KK5 möglicherweise untererfasst</div>
+      <div class="text-sm text-amber-200">Die 2024-Pipeline erfasst KK5 strukturell um ~10,3 Mio. unter GT (Haushaltssatzung §1: 133,8 Mio. vs. ETL: 123,5 Mio.). Deltas in diesem Teilplan sollten gegen den offiziellen Haushaltsplan verifiziert werden.</div>
     </div>
     <div class="note mb-3" id="jv-dd-subtitle"></div>
     <div class="overflow-x-auto" id="jv-dd-body"></div>
@@ -1032,6 +1041,7 @@ function buildJVPicker(containerId, active, onChange) {
 function initJahresvergleich() {
   buildJVPicker("jv-basis-picker", jvBasis, yr => { jvBasis = yr; rebuildJVPickers(); renderJahresvergleich(); });
   buildJVPicker("jv-vergl-picker", jvVergl, yr => { jvVergl = yr; rebuildJVPickers(); renderJahresvergleich(); });
+  buildJVTPSelect();
   renderJahresvergleich();
 }
 
@@ -1040,13 +1050,27 @@ function rebuildJVPickers() {
   buildJVPicker("jv-vergl-picker", jvVergl, yr => { jvVergl = yr; rebuildJVPickers(); renderJahresvergleich(); });
 }
 
+function buildJVTPSelect() {
+  const sel = document.getElementById("jv-tp-select");
+  sel.innerHTML = "";
+  const tps = DATA.by_year[String(jvVergl)].teilplaene;
+  tps.forEach(tp => {
+    const opt = document.createElement("option");
+    opt.value = tp.tp_nr;
+    opt.textContent = `TP${tp.tp_nr} – ${tp.tp_name}`;
+    sel.appendChild(opt);
+  });
+  // Pre-select first TP
+  if (tps.length > 0) jvAktivTP = tps[0].tp_nr;
+}
+
 function renderJahresvergleich() {
   if (jvBasis === jvVergl) {
     ["jv-eq-grouped","jv-eq-delta","jv-tp-grouped","jv-tp-delta"].forEach(id => {
       const el = document.getElementById(id);
-      if (el) { el.innerHTML = '<div class="text-slate-500 p-4">Bitte zwei verschiedene Jahre wählen.</div>'; }
+      if (el) el.innerHTML = '<div class="text-slate-500 p-4">Bitte zwei verschiedene Jahre wählen.</div>';
     });
-    document.getElementById("jv-drilldown").classList.add("hidden");
+    document.getElementById("jv-drilldown").style.display = "none";
     return;
   }
   const label = `${jvBasis} → ${jvVergl}`;
@@ -1061,10 +1085,13 @@ function renderJahresvergleich() {
   document.getElementById("jv-summary").innerHTML =
     `GT Erträge ${dErt >= 0 ? "+" : ""}${fmt(dErt,1)} Mio. &nbsp;|&nbsp; GT Aufwendungen ${dAuf >= 0 ? "+" : ""}${fmt(dAuf,1)} Mio.`;
 
+  // Rebuild TP select in case year changed
+  buildJVTPSelect();
   renderJVErtragsquellen();
   renderJVTeilplaene();
+  // Always show drill-down
+  document.getElementById("jv-drilldown").style.display = "";
   if (jvAktivTP) showJVDrilldown(jvAktivTP);
-  else document.getElementById("jv-drilldown").classList.add("hidden");
 }
 
 function renderJVErtragsquellen() {
@@ -1169,9 +1196,18 @@ function renderJVTeilplaene() {
 
 function showJVDrilldown(tpNr) {
   jvAktivTP = tpNr;
+  // Sync select dropdown
+  const sel = document.getElementById("jv-tp-select");
+  if (sel) sel.value = tpNr;
+
   const tpA = DATA.by_year[String(jvBasis)].teilplaene.find(t => t.tp_nr === tpNr);
   const tpB = DATA.by_year[String(jvVergl)].teilplaene.find(t => t.tp_nr === tpNr);
   const tpName = (tpA || tpB)?.tp_name || "TP " + tpNr;
+
+  // ETL-Warnung bei 2024-Vergleich (KK5-Untererfassung bekannt)
+  const warnEl = document.getElementById("jv-etl-warn");
+  const showWarn = (jvBasis === 2024 || jvVergl === 2024);
+  warnEl.classList.toggle("hidden", !showWarn);
 
   const produkte = DATA.simulator_produkte.filter(p => p.tp_nr === tpNr);
   const rows = produkte.map(p => {
@@ -1223,9 +1259,6 @@ function showJVDrilldown(tpNr) {
   html += `</tbody></table>`;
 
   document.getElementById("jv-dd-body").innerHTML = html;
-  const dd = document.getElementById("jv-drilldown");
-  dd.classList.remove("hidden");
-  dd.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 </script>
 </body>
