@@ -11,6 +11,7 @@ DB_PATH  = os.path.join(BASE_DIR, "suhl_haushalt_2025.db")
 OUT_PATH = os.path.join(BASE_DIR, "budget_data.json")
 
 GT_BY_YEAR = {
+    2023: {"ertraege": 129_315_250.00, "aufwendungen": 129_724_490.00, "ergebnis": -409_240.00},
     2024: {"ertraege": 130_353_020.00, "aufwendungen": 133_802_080.00, "ergebnis": -3_449_060.00},
     2025: {"ertraege": 136_395_290.00, "aufwendungen": 138_003_230.00, "ergebnis": -1_607_940.00},
 }
@@ -426,7 +427,7 @@ def main():
 
     # ── by_year: pro Jahr meta + teilplaene + ertragsquellen ─────────────────
     by_year = {}
-    for yr in [2024, 2025]:
+    for yr in [2023, 2024, 2025]:
         by_year[str(yr)] = {
             "meta":          make_meta(con, yr),
             "teilplaene":    make_teilplaene(con, yr),
@@ -439,9 +440,11 @@ def main():
     result["teilplaene"]    = by_year["2025"]["teilplaene"]
     result["ertragsquellen"] = by_year["2025"]["ertragsquellen"]
 
-    # ── Zeitreihe (IST 2022 aus 2024-ETL + 2025-ETL-Sicht)
+    # ── Zeitreihe: 2023 PLAN aus 2023-ETL; IST-Werte aus 2025-ETL-Perspektive
     jahre_zt = [
+        (2021, "IST_ERGEBNIS",   "Ist 2021",     False),
         (2022, "IST_ERGEBNIS",   "Ist 2022",     False),
+        (2023, "PLAN_ANSATZ",    "Ansatz 2023",  False),
         (2023, "IST_ERGEBNIS",   "Ist 2023",     False),
         (2024, "ANSATZ_VORJAHR", "Ansatz 2024",  False),
         (2025, "PLAN_ANSATZ",    "Ansatz 2025",  False),
@@ -481,7 +484,12 @@ def main():
                 JOIN konten k ON h.konto_id=k.id
                 JOIN kontenklassen kk ON k.kontenklasse_id=kk.id
                 WHERE h.produkt_id=p.id AND h.daten_jahr=2024
-                  AND h.wert_typ='PLAN_ANSATZ' AND kk.nummer=5) AS kk5_2024
+                  AND h.wert_typ='PLAN_ANSATZ' AND kk.nummer=5) AS kk5_2024,
+               (SELECT COALESCE(SUM(h.betrag),0) FROM haushaltswerte h
+                JOIN konten k ON h.konto_id=k.id
+                JOIN kontenklassen kk ON k.kontenklasse_id=kk.id
+                WHERE h.produkt_id=p.id AND h.daten_jahr=2023
+                  AND h.wert_typ='PLAN_ANSATZ' AND kk.nummer=5) AS kk5_2023
         FROM produkte p
         JOIN steuerungs_kategorien sk ON p.steuerungs_kategorie_id=sk.id
         JOIN teilplaene t ON p.teilplan_id=t.id
@@ -499,6 +507,7 @@ def main():
             "tp_name":               TP_NAMEN_SCHOEN.get(r["tp_nr"], r["tp_bez"]),
             "kk5_2025":              round(r["kk5"], 2),
             "kk5_2024":              round(r["kk5_2024"], 2),
+            "kk5_2023":              round(r["kk5_2023"], 2),
         })
     result["simulator_produkte"] = sim
 
@@ -559,7 +568,7 @@ def main():
         ("Simulator-Produkte", len(sim)),
     ]:
         print(f"     {k+':':25s} {v}")
-    for yr in [2024, 2025]:
+    for yr in [2023, 2024, 2025]:
         m = by_year[str(yr)]["meta"]
         print(f"     {f'ETL KK4 {yr}:':25s} {m['ertraege_etl']:>15,.2f}  (GT {GT_BY_YEAR[yr]['ertraege']:>15,.2f})")
         print(f"     {f'ETL KK5 {yr}:':25s} {m['aufwendungen_etl']:>15,.2f}  (GT {GT_BY_YEAR[yr]['aufwendungen']:>15,.2f})")

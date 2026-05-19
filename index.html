@@ -204,7 +204,7 @@
   <div class="card p-5 mb-6">
     <div class="section-title">Erträge & Aufwendungen 2022–2028</div>
     <div id="chart-zeitreihe" class="plotly-chart" style="min-height:420px;"></div>
-    <div class="note mt-2">Schraffiert = Finanzplanung (Prognose). Quellen: Haushaltspläne Suhl 2024 &amp; 2025</div>
+    <div class="note mt-2">Schraffiert = Finanzplanung (Prognose). Quellen: Haushaltspläne Suhl 2023, 2024 &amp; 2025</div>
   </div>
 </div>
 
@@ -285,7 +285,7 @@
 
 <!-- ─── FOOTER ─────────────────────────────────────────────────────────── -->
 <div class="mt-8 text-center note">
-  Datenquelle: Haushaltspläne Stadt Suhl 2024 &amp; 2025 (öffentliche Dokumente) ·
+  Datenquelle: Haushaltspläne Stadt Suhl 2023, 2024 &amp; 2025 (öffentliche Dokumente) ·
   Generiert mit Cortex AI Solutions ·
   <span id="generiert-am"></span>
 </div>
@@ -1022,7 +1022,9 @@ function jvShortTP(n) {
 }
 
 function getKK5(p, jahr) {
-  return jahr === 2025 ? (p.kk5_2025 || 0) : (p.kk5_2024 || 0);
+  if (jahr === 2025) return p.kk5_2025 || 0;
+  if (jahr === 2024) return p.kk5_2024 || 0;
+  return p.kk5_2023 || 0;
 }
 
 function buildJVPicker(containerId, active, onChange) {
