@@ -10,9 +10,10 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH  = os.path.join(BASE_DIR, "suhl_haushalt_2025.db")
 OUT_PATH = os.path.join(BASE_DIR, "budget_data.json")
 
-GT_ERTRAEGE     = 136_395_290.00
-GT_AUFWENDUNGEN = 138_003_230.00
-GT_ERGEBNIS     = -1_607_940.00
+GT_BY_YEAR = {
+    2024: {"ertraege": 130_353_020.00, "aufwendungen": 133_802_080.00, "ergebnis": -3_449_060.00},
+    2025: {"ertraege": 136_395_290.00, "aufwendungen": 138_003_230.00, "ergebnis": -1_607_940.00},
+}
 
 # Lesbare Produktnamen nach Thueringer Produktrahmen
 # Ueberschreibt generische ETL-Bezeichnungen "Produkt XXXXXX"
@@ -331,33 +332,115 @@ def kk4_gruppe(konto_nr: str) -> str:
     return "Sonstige Erträge"
 
 
+def kk_sum_y(con, kk_nr, jahr, typ):
+    return con.execute("""
+        SELECT COALESCE(SUM(h.betrag),0) FROM haushaltswerte h
+        JOIN konten k ON h.konto_id=k.id
+        JOIN kontenklassen kk ON k.kontenklasse_id=kk.id
+        WHERE h.daten_jahr=? AND h.wert_typ=? AND kk.nummer=?
+    """, (jahr, typ, kk_nr)).fetchone()[0]
+
+
+def make_meta(con, jahr):
+    gt = GT_BY_YEAR[jahr]
+    return {
+        "titel":               f"Haushaltsplan Stadt Suhl {jahr}",
+        "ertraege_soll":       gt["ertraege"],
+        "aufwendungen_soll":   gt["aufwendungen"],
+        "jahresergebnis_soll": gt["ergebnis"],
+        "ertraege_etl":        round(kk_sum_y(con, 4, jahr, "PLAN_ANSATZ"), 2),
+        "aufwendungen_etl":    round(kk_sum_y(con, 5, jahr, "PLAN_ANSATZ"), 2),
+        "generiert_am":        datetime.now().isoformat(),
+    }
+
+
+def make_teilplaene(con, jahr):
+    tps = []
+    for tp in con.execute("SELECT id, nummer, bezeichnung FROM teilplaene ORDER BY nummer"):
+        tid, tp_nr = tp["id"], tp["nummer"]
+
+        def tp_kk(kk_nr, _tid=tid, _jahr=jahr):
+            return round(con.execute("""
+                SELECT COALESCE(SUM(h.betrag),0) FROM haushaltswerte h
+                JOIN konten k ON h.konto_id=k.id
+                JOIN kontenklassen kk ON k.kontenklasse_id=kk.id
+                JOIN produkte p ON h.produkt_id=p.id
+                WHERE p.teilplan_id=? AND h.daten_jahr=?
+                  AND h.wert_typ='PLAN_ANSATZ' AND kk.nummer=?
+            """, (_tid, _jahr, kk_nr)).fetchone()[0], 2)
+
+        nach_sk = {}
+        for code in ("FREIWILLIG", "PFLICHT_ERMESSEN", "PFLICHT_STRIKT", "UEBERTRAGEN"):
+            nach_sk[code] = round(con.execute("""
+                SELECT COALESCE(SUM(h.betrag),0) FROM haushaltswerte h
+                JOIN konten k ON h.konto_id=k.id
+                JOIN kontenklassen kk ON k.kontenklasse_id=kk.id
+                JOIN produkte p ON h.produkt_id=p.id
+                LEFT JOIN steuerungs_kategorien sk ON p.steuerungs_kategorie_id=sk.id
+                WHERE p.teilplan_id=? AND h.daten_jahr=?
+                  AND h.wert_typ='PLAN_ANSATZ' AND kk.nummer=5 AND sk.code=?
+            """, (tid, jahr, code)).fetchone()[0], 2)
+
+        nach_sk["unbekannt"] = round(con.execute("""
+            SELECT COALESCE(SUM(h.betrag),0) FROM haushaltswerte h
+            JOIN konten k ON h.konto_id=k.id
+            JOIN kontenklassen kk ON k.kontenklasse_id=kk.id
+            JOIN produkte p ON h.produkt_id=p.id
+            WHERE p.teilplan_id=? AND h.daten_jahr=?
+              AND h.wert_typ='PLAN_ANSATZ' AND kk.nummer=5
+              AND p.steuerungs_kategorie_id IS NULL
+        """, (tid, jahr)).fetchone()[0], 2)
+
+        tps.append({
+            "tp_nr":   tp_nr,
+            "tp_name": TP_NAMEN_SCHOEN.get(tp_nr, tp["bezeichnung"]),
+            "ertraege":     tp_kk(4),
+            "aufwendungen": tp_kk(5),
+            "aufwendungen_nach_steuerung": nach_sk,
+        })
+    return tps
+
+
+def make_ertragsquellen(con, jahr):
+    gruppen = defaultdict(float)
+    for r in con.execute("""
+        SELECT k.konto_nummer, SUM(h.betrag) AS betrag FROM haushaltswerte h
+        JOIN konten k ON h.konto_id=k.id
+        JOIN kontenklassen kk ON k.kontenklasse_id=kk.id
+        WHERE h.daten_jahr=? AND h.wert_typ='PLAN_ANSATZ' AND kk.nummer=4
+        GROUP BY k.konto_nummer
+    """, (jahr,)):
+        gruppen[kk4_gruppe(r["konto_nummer"])] += r["betrag"]
+
+    return [
+        {"gruppe": g, "betrag": round(v, 2)}
+        for g, v in sorted(gruppen.items(), key=lambda x: -x[1])
+    ]
+
+
 def main():
     con = sqlite3.connect(DB_PATH)
     con.row_factory = sqlite3.Row
 
-    def kk_sum(kk_nr, jahr, typ):
-        return con.execute("""
-            SELECT COALESCE(SUM(h.betrag),0) FROM haushaltswerte h
-            JOIN konten k ON h.konto_id=k.id
-            JOIN kontenklassen kk ON k.kontenklasse_id=kk.id
-            WHERE h.daten_jahr=? AND h.wert_typ=? AND kk.nummer=?
-        """, (jahr, typ, kk_nr)).fetchone()[0]
-
     result = {}
 
-    # ── Meta ──────────────────────────────────────────────────────────────────
-    result["meta"] = {
-        "titel": "Haushaltsplan Stadt Suhl 2025",
-        "ertraege_soll":       GT_ERTRAEGE,
-        "aufwendungen_soll":   GT_AUFWENDUNGEN,
-        "jahresergebnis_soll": GT_ERGEBNIS,
-        "ertraege_etl":        round(kk_sum(4, 2025, "PLAN_ANSATZ"), 2),
-        "aufwendungen_etl":    round(kk_sum(5, 2025, "PLAN_ANSATZ"), 2),
-        "generiert_am":        datetime.now().isoformat(),
-    }
+    # ── by_year: pro Jahr meta + teilplaene + ertragsquellen ─────────────────
+    by_year = {}
+    for yr in [2024, 2025]:
+        by_year[str(yr)] = {
+            "meta":          make_meta(con, yr),
+            "teilplaene":    make_teilplaene(con, yr),
+            "ertragsquellen": make_ertragsquellen(con, yr),
+        }
+    result["by_year"] = by_year
 
-    # ── Zeitreihe ─────────────────────────────────────────────────────────────
-    jahre = [
+    # Root-level zeigt auf 2025-Daten (rueckwaertskompatibel fuer Simulator etc.)
+    result["meta"]          = by_year["2025"]["meta"]
+    result["teilplaene"]    = by_year["2025"]["teilplaene"]
+    result["ertragsquellen"] = by_year["2025"]["ertragsquellen"]
+
+    # ── Zeitreihe (aus 2025-ETL-Sicht: IST 2023, Ansatz 2024/2025, FP 2026-2028)
+    jahre_zt = [
         (2023, "IST_ERGEBNIS",   "Ist 2023",     False),
         (2024, "ANSATZ_VORJAHR", "Ansatz 2024",  False),
         (2025, "PLAN_ANSATZ",    "Ansatz 2025",  False),
@@ -368,77 +451,15 @@ def main():
     result["zeitreihe"] = [
         {
             "jahr": j, "typ": t, "label": lbl, "ist_prognose": prog,
-            "ertraege":     round(kk_sum(4, j, t), 2),
-            "aufwendungen": round(kk_sum(5, j, t), 2),
-            "einzahlungen": round(kk_sum(6, j, t), 2),
-            "auszahlungen": round(kk_sum(7, j, t), 2),
+            "ertraege":     round(kk_sum_y(con, 4, j, t), 2),
+            "aufwendungen": round(kk_sum_y(con, 5, j, t), 2),
+            "einzahlungen": round(kk_sum_y(con, 6, j, t), 2),
+            "auszahlungen": round(kk_sum_y(con, 7, j, t), 2),
         }
-        for j, t, lbl, prog in jahre
+        for j, t, lbl, prog in jahre_zt
     ]
 
-    # ── Teilplaene ─────────────────────────────────────────────────────────────
-    tps = []
-    for tp in con.execute("SELECT id, nummer, bezeichnung FROM teilplaene ORDER BY nummer"):
-        tid, tp_nr = tp["id"], tp["nummer"]
-
-        def tp_kk(kk_nr, _tid=tid):
-            return round(con.execute("""
-                SELECT COALESCE(SUM(h.betrag),0) FROM haushaltswerte h
-                JOIN konten k ON h.konto_id=k.id
-                JOIN kontenklassen kk ON k.kontenklasse_id=kk.id
-                JOIN produkte p ON h.produkt_id=p.id
-                WHERE p.teilplan_id=? AND h.daten_jahr=2025
-                  AND h.wert_typ='PLAN_ANSATZ' AND kk.nummer=?
-            """, (_tid, kk_nr)).fetchone()[0], 2)
-
-        nach_sk = {}
-        for code in ("FREIWILLIG", "PFLICHT_ERMESSEN", "PFLICHT_STRIKT", "UEBERTRAGEN"):
-            nach_sk[code] = round(con.execute("""
-                SELECT COALESCE(SUM(h.betrag),0) FROM haushaltswerte h
-                JOIN konten k ON h.konto_id=k.id
-                JOIN kontenklassen kk ON k.kontenklasse_id=kk.id
-                JOIN produkte p ON h.produkt_id=p.id
-                LEFT JOIN steuerungs_kategorien sk ON p.steuerungs_kategorie_id=sk.id
-                WHERE p.teilplan_id=? AND h.daten_jahr=2025
-                  AND h.wert_typ='PLAN_ANSATZ' AND kk.nummer=5 AND sk.code=?
-            """, (tid, code)).fetchone()[0], 2)
-
-        nach_sk["unbekannt"] = round(con.execute("""
-            SELECT COALESCE(SUM(h.betrag),0) FROM haushaltswerte h
-            JOIN konten k ON h.konto_id=k.id
-            JOIN kontenklassen kk ON k.kontenklasse_id=kk.id
-            JOIN produkte p ON h.produkt_id=p.id
-            WHERE p.teilplan_id=? AND h.daten_jahr=2025
-              AND h.wert_typ='PLAN_ANSATZ' AND kk.nummer=5
-              AND p.steuerungs_kategorie_id IS NULL
-        """, (tid,)).fetchone()[0], 2)
-
-        tps.append({
-            "tp_nr":   tp_nr,
-            "tp_name": TP_NAMEN_SCHOEN.get(tp_nr, tp["bezeichnung"]),
-            "ertraege_2025":     tp_kk(4),
-            "aufwendungen_2025": tp_kk(5),
-            "aufwendungen_nach_steuerung": nach_sk,
-        })
-    result["teilplaene"] = tps
-
-    # ── Ertragsquellen (Sankey-Quellen) ───────────────────────────────────────
-    gruppen = defaultdict(float)
-    for r in con.execute("""
-        SELECT k.konto_nummer, SUM(h.betrag) AS betrag FROM haushaltswerte h
-        JOIN konten k ON h.konto_id=k.id
-        JOIN kontenklassen kk ON k.kontenklasse_id=kk.id
-        WHERE h.daten_jahr=2025 AND h.wert_typ='PLAN_ANSATZ' AND kk.nummer=4
-        GROUP BY k.konto_nummer
-    """):
-        gruppen[kk4_gruppe(r["konto_nummer"])] += r["betrag"]
-
-    result["ertragsquellen"] = [
-        {"gruppe": g, "betrag_2025": round(v, 2)}
-        for g, v in sorted(gruppen.items(), key=lambda x: -x[1])
-    ]
-
-    # ── Simulator-Produkte ────────────────────────────────────────────────────
+    # ── Simulator-Produkte (immer 2025-Basis) ────────────────────────────────
     max_kuerz = {
         "FREIWILLIG":    100,
         "PFLICHT_ERMESSEN": 15,
@@ -498,13 +519,16 @@ def main():
     print(f"[OK] {OUT_PATH}  ({size_kb} KB)")
     for k, v in [
         ("Zeitreihe",          len(result["zeitreihe"])),
-        ("Teilplaene",         len(tps)),
+        ("Teilplaene 2025",    len(by_year["2025"]["teilplaene"])),
+        ("Teilplaene 2024",    len(by_year["2024"]["teilplaene"])),
         ("Ertragsquellen",     len(result["ertragsquellen"])),
         ("Simulator-Produkte", len(sim)),
     ]:
         print(f"     {k+':':25s} {v}")
-    print(f"     {'ETL KK4:':25s} {result['meta']['ertraege_etl']:>15,.2f}")
-    print(f"     {'ETL KK5:':25s} {result['meta']['aufwendungen_etl']:>15,.2f}")
+    for yr in [2024, 2025]:
+        m = by_year[str(yr)]["meta"]
+        print(f"     {f'ETL KK4 {yr}:':25s} {m['ertraege_etl']:>15,.2f}  (GT {GT_BY_YEAR[yr]['ertraege']:>15,.2f})")
+        print(f"     {f'ETL KK5 {yr}:':25s} {m['aufwendungen_etl']:>15,.2f}  (GT {GT_BY_YEAR[yr]['aufwendungen']:>15,.2f})")
 
 
 if __name__ == "__main__":

@@ -51,17 +51,32 @@
   <img src="logo.jpg" alt="Cortex AI Solutions" class="h-12 w-auto rounded-lg shrink-0 opacity-90 hover:opacity-100 transition-opacity">
 </div>
 
+<!-- ─── JAHRES-AUSWAHL ─────────────────────────────────────────────────── -->
+<div class="flex items-center gap-3 mb-4">
+  <span class="text-xs text-slate-500 uppercase tracking-wider">Haushaltsjahr:</span>
+  <div class="flex gap-1.5" id="jahr-toggle">
+    <button onclick="switchYear(2024)" data-jahr="2024"
+      class="year-pill text-sm px-4 py-1.5 rounded-full border border-slate-600 text-slate-400 hover:border-blue-400 hover:text-slate-200 transition-colors">
+      2024
+    </button>
+    <button onclick="switchYear(2025)" data-jahr="2025"
+      class="year-pill text-sm px-4 py-1.5 rounded-full border-blue-400 text-slate-100 bg-blue-950 transition-colors">
+      2025
+    </button>
+  </div>
+</div>
+
 <!-- ─── KPI CARDS ──────────────────────────────────────────────────────── -->
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8" id="kpi-cards">
   <div class="card p-4">
     <div class="kpi-label">Gesamterträge</div>
     <div class="kpi-value text-emerald-400" id="kpi-ertraege">–</div>
-    <div class="note mt-1">Haushaltssatzung 2025</div>
+    <div class="note mt-1" id="kpi-ertraege-note">Haushaltssatzung 2025</div>
   </div>
   <div class="card p-4">
     <div class="kpi-label">Gesamtaufwendungen</div>
     <div class="kpi-value text-rose-400" id="kpi-aufwendungen">–</div>
-    <div class="note mt-1">Haushaltssatzung 2025</div>
+    <div class="note mt-1" id="kpi-aufwend-note">Haushaltssatzung 2025</div>
   </div>
   <div class="card p-4">
     <div class="kpi-label">Jahresergebnis</div>
@@ -117,7 +132,7 @@
 
   <!-- Balkendiagramm Teilpläne -->
   <div class="card p-5 mb-6">
-    <div class="section-title">Saldo (Erträge − Aufwendungen) je Teilplan 2025</div>
+    <div class="section-title">Saldo (Erträge − Aufwendungen) je Teilplan <span id="bar-tp-jahr">2025</span></div>
     <div id="chart-bar-tp" class="plotly-chart" style="min-height:320px;"></div>
   </div>
 </div>
@@ -208,7 +223,7 @@
 
 <!-- ─── FOOTER ─────────────────────────────────────────────────────────── -->
 <div class="mt-8 text-center note">
-  Datenquelle: Haushaltsplan Stadt Suhl 2025 (öffentliches Dokument) ·
+  Datenquelle: Haushaltspläne Stadt Suhl 2024 &amp; 2025 (öffentliche Dokumente) ·
   Generiert mit Cortex AI Solutions ·
   <span id="generiert-am"></span>
 </div>
@@ -248,6 +263,29 @@ const SK_LABEL = {
 // ── Simulator state ────────────────────────────────────────────────────────
 let DATA = null;
 let simState = {};   // produkt_nummer → kuerzung_pct (0–max)
+let activeJahr = 2025;
+
+function getYD() { return DATA.by_year[String(activeJahr)]; }
+
+function switchYear(jahr) {
+  activeJahr = jahr;
+  document.querySelectorAll(".year-pill").forEach(btn => {
+    const active = Number(btn.dataset.jahr) === jahr;
+    btn.classList.toggle("border-blue-400",  active);
+    btn.classList.toggle("text-slate-100",   active);
+    btn.classList.toggle("bg-blue-950",      active);
+    btn.classList.toggle("border-slate-600", !active);
+    btn.classList.toggle("text-slate-400",   !active);
+    btn.classList.toggle("bg-transparent",   !active);
+  });
+  renderKPI();
+  renderSankey();
+  renderTreemap();
+  renderBarTP();
+  buildMfSelector();
+  const defaultEq = getYD().ertragsquellen.find(e => e.gruppe.toLowerCase().includes("schlüssel")) || getYD().ertragsquellen[0];
+  if (defaultEq) showMittelflussDetail(defaultEq);
+}
 
 // ── Boot ──────────────────────────────────────────────────────────────────
 fetch("budget_data.json")
@@ -271,14 +309,14 @@ function init() {
   document.getElementById("toggle-gestaltbar").addEventListener("change", renderTreemap);
   document.getElementById("generiert-am").textContent = "Stand: " + new Date(DATA.meta.generiert_am).toLocaleDateString("de-DE");
   buildMfSelector();
-  const defaultEq = DATA.ertragsquellen.find(e => e.gruppe.toLowerCase().includes("schlüssel")) || DATA.ertragsquellen[0];
+  const defaultEq = getYD().ertragsquellen.find(e => e.gruppe.toLowerCase().includes("schlüssel")) || getYD().ertragsquellen[0];
   if (defaultEq) showMittelflussDetail(defaultEq);
 }
 
 function buildMfSelector() {
   const sel = document.getElementById("mf-selector");
   sel.innerHTML = "";
-  DATA.ertragsquellen.forEach(eq => {
+  getYD().ertragsquellen.forEach(eq => {
     const shortName = eq.gruppe
       .replace(" & FAG-Ausgleich", "").replace(" & Steueranteile", "")
       .replace(" & Beteiligungen", "").replace(" & Entgelte", "").replace(" (SGB)", "");
@@ -294,7 +332,7 @@ function buildMfSelector() {
 
 // ── KPI ───────────────────────────────────────────────────────────────────
 function renderKPI() {
-  const m = DATA.meta;
+  const m = getYD().meta;
   document.getElementById("kpi-ertraege").textContent     = fmtMio(m.ertraege_soll);
   document.getElementById("kpi-aufwendungen").textContent = fmtMio(m.aufwendungen_soll);
   const erg = m.jahresergebnis_soll;
@@ -302,12 +340,15 @@ function renderKPI() {
   el.textContent = fmtMio(erg);
   el.className = "kpi-value " + (erg < 0 ? "text-rose-400" : "text-emerald-400");
   document.getElementById("kpi-prokopf").textContent = fmt(m.aufwendungen_soll / 36307, 0);
+  const note = `Haushaltssatzung ${activeJahr}`;
+  document.getElementById("kpi-ertraege-note").textContent = note;
+  document.getElementById("kpi-aufwend-note").textContent  = note;
 }
 
 // ── SANKEY ────────────────────────────────────────────────────────────────
 function renderSankey() {
-  const eq = DATA.ertragsquellen;
-  const tp = DATA.teilplaene;
+  const eq = getYD().ertragsquellen;
+  const tp = getYD().teilplaene;
 
   // Quellen: 0..n-1
   const srcLabels = eq.map(e => e.gruppe);
@@ -327,17 +368,14 @@ function renderSankey() {
     return SK_COLOR[max] || "#334155";
   });
 
-  // Gesamt-Erträge der Quellen
-  const totalErtrag = eq.reduce((a,e)=>a+e.betrag_2025,0);
-
   // Links: jede Ertragsquelle → jeder Teilplan (proportional zu TP-Aufwendungsanteil)
   const linkSrc = [], linkTgt = [], linkVal = [], linkColor = [];
-  const tpAufwTotal = tp.reduce((a,t)=>a+t.aufwendungen_2025,0);
+  const tpAufwTotal = tp.reduce((a,t)=>a+t.aufwendungen,0);
 
   eq.forEach((e, si) => {
     tp.forEach((t, ti) => {
-      const share = tpAufwTotal > 0 ? t.aufwendungen_2025 / tpAufwTotal : 0;
-      const val   = Math.round(e.betrag_2025 * share);
+      const share = tpAufwTotal > 0 ? t.aufwendungen / tpAufwTotal : 0;
+      const val   = Math.round(e.betrag * share);
       if (val > 0) {
         linkSrc.push(si);
         linkTgt.push(nSrc + ti);
@@ -369,11 +407,10 @@ function renderSankey() {
   sankeyEl.on("plotly_click", function(eventData) {
     const pt = eventData.points[0];
     if (!pt) return;
-    // Knoten-Klick: pt.label ist der Node-Label
-    let eq = DATA.ertragsquellen.find(e => e.gruppe === pt.label);
-    // Link-Klick: pt.source.label ist der Quell-Knoten (feuert zuverlässig)
+    const eqs = getYD().ertragsquellen;
+    let eq = eqs.find(e => e.gruppe === pt.label);
     if (!eq && pt.source && pt.source.label) {
-      eq = DATA.ertragsquellen.find(e => e.gruppe === pt.source.label);
+      eq = eqs.find(e => e.gruppe === pt.source.label);
     }
     if (eq) showMittelflussDetail(eq);
   });
@@ -385,13 +422,13 @@ function renderTreemap() {
   const SK_CODES = ["FREIWILLIG","PFLICHT_ERMESSEN","PFLICHT_STRIKT","UEBERTRAGEN","unbekannt"];
 
   const ids    = ["ROOT"];
-  const labels = ["Aufwendungen 2025"];
+  const labels = [`Aufwendungen ${activeJahr}`];
   const parents= [""];
   const values = [0];
   const colors = ["rgba(0,0,0,0)"];
   const texts  = [""];
 
-  DATA.teilplaene.forEach(tp => {
+  getYD().teilplaene.forEach(tp => {
     const sk = tp.aufwendungen_nach_steuerung;
     let tpTotal = 0;
     SK_CODES.forEach(code => {
@@ -451,9 +488,10 @@ function renderTreemap() {
 
 // ── BAR CHART: Saldo je TP ────────────────────────────────────────────────
 function renderBarTP() {
-  const tp = DATA.teilplaene;
+  document.getElementById("bar-tp-jahr").textContent = activeJahr;
+  const tp = getYD().teilplaene;
   const names  = tp.map(t => t.tp_name);
-  const saldi  = tp.map(t => t.ertraege_2025 - t.aufwendungen_2025);
+  const saldi  = tp.map(t => t.ertraege - t.aufwendungen);
   const colors = saldi.map(s => s >= 0 ? "#10b981" : "#ef4444");
 
   Plotly.newPlot("chart-bar-tp", [{
@@ -747,10 +785,10 @@ function escHtml(s) {
 
 // ── DRILL-DOWN MODAL ──────────────────────────────────────────────────────
 function openDrillDown(tpNr, skFilter) {
-  const tp = DATA.teilplaene.find(t => t.tp_nr === tpNr);
+  const tp = getYD().teilplaene.find(t => t.tp_nr === tpNr);
   if (!tp) return;
 
-  // Produkte filtern und sortieren
+  // Produkte filtern und sortieren (immer 2025-Basis)
   let produkte = (DATA.simulator_produkte || []).filter(p => p.tp_nr === tpNr);
   if (skFilter) produkte = produkte.filter(p => p.steuerungs_code === skFilter);
   const mitBudget  = produkte.filter(p => p.kk5_2025 > 0).sort((a, b) => b.kk5_2025 - a.kk5_2025);
@@ -783,7 +821,10 @@ function openDrillDown(tpNr, skFilter) {
     skBreakdown || `${mitBudget.length} Produkte mit Budget · ${fmtMio(totalBudget)}`;
 
   // Tabelle aufbauen
-  let html = `<table class="w-full text-sm">
+  const budgetJahrLabel = activeJahr !== 2025
+    ? `<div class="mb-2 text-xs text-amber-500">Produktliste & Budget: Ansatz 2025 (kein 2024-Produktexport)</div>`
+    : "";
+  let html = budgetJahrLabel + `<table class="w-full text-sm">
     <thead class="text-left text-slate-400">
       <tr>
         <th class="pr-3 font-medium">Nr.</th>
@@ -828,20 +869,20 @@ function closeDrillDown() {
 
 // ── MITTELFLUSS-DETAIL ────────────────────────────────────────────────────
 function showMittelflussDetail(eq) {
-  const tps = DATA.teilplaene;
-  const tpAufwTotal = tps.reduce((a, t) => a + t.aufwendungen_2025, 0);
+  const tps = getYD().teilplaene;
+  const tpAufwTotal = tps.reduce((a, t) => a + t.aufwendungen, 0);
 
   const flows = tps.map(t => ({
     tp_name: t.tp_name,
-    betrag: tpAufwTotal > 0 ? Math.round(eq.betrag_2025 * t.aufwendungen_2025 / tpAufwTotal) : 0,
+    betrag: tpAufwTotal > 0 ? Math.round(eq.betrag * t.aufwendungen / tpAufwTotal) : 0,
   })).sort((a, b) => b.betrag - a.betrag);
 
   const maxBetrag = flows[0]?.betrag || 1;
 
   let html = `<div class="mb-4 pb-3 border-b border-slate-700">
-    <div class="text-xs text-slate-400 uppercase tracking-wider mb-1">Ertragsquelle</div>
+    <div class="text-xs text-slate-400 uppercase tracking-wider mb-1">Ertragsquelle ${activeJahr}</div>
     <div class="text-slate-100 font-semibold text-sm">${escHtml(eq.gruppe)}</div>
-    <div class="text-emerald-400 font-mono text-sm mt-0.5">${fmtMio(eq.betrag_2025)} Gesamt</div>
+    <div class="text-emerald-400 font-mono text-sm mt-0.5">${fmtMio(eq.betrag)} Gesamt</div>
   </div>
   <div class="space-y-1.5">`;
 
