@@ -19,6 +19,15 @@
   .tag-uebertragen { background: #3b2f00; color: #fbbf24; }
   .tag-unbekannt { background: #1e293b; color: #94a3b8; }
   input[type=range] { accent-color: #60a5fa; }
+  #drilldown-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+  #drilldown-overlay.hidden { display: none; }
+  #drilldown-card { max-height: 82vh; width: 100%; max-width: 820px; display: flex; flex-direction: column; }
+  #dd-body table { border-collapse: collapse; width: 100%; }
+  #dd-body thead th { position: sticky; top: 0; background: #1e293b; padding-bottom: 0.625rem; padding-top: 0.25rem; }
+  #dd-body tbody tr:hover { background: rgba(51,65,85,0.4); }
+  #dd-body tbody td { padding: 0.5rem 0; border-bottom: 1px solid #1e293b; }
+  #chart-treemap { cursor: pointer; }
+  .bar-mini { display: inline-block; height: 6px; background: #3b82f6; border-radius: 3px; vertical-align: middle; }
   .slider-row { display: grid; grid-template-columns: 1fr 120px 90px; gap: 0.5rem; align-items: center; }
   .warn-box { background: #431407; border: 1px solid #ea580c; border-radius: 0.5rem; padding: 0.75rem 1rem; }
   .section-title { font-size: 1.125rem; font-weight: 600; color: #cbd5e1; margin-bottom: 1rem; }
@@ -93,7 +102,7 @@
         </label>
       </div>
       <div id="chart-treemap" class="plotly-chart"></div>
-      <div class="note mt-2">Farbe: grün = freiwillig · blau = Ermessenspflicht · rot = Striktpflicht · gelb = Übertragen</div>
+      <div class="note mt-2">Farbe: grün = freiwillig · blau = Ermessenspflicht · rot = Striktpflicht · gelb = Übertragen · <span class="text-sky-500">Klick auf Block → Produktdetails</span></div>
     </div>
 
   </div>
@@ -161,6 +170,31 @@
 
     <!-- Slider-Liste -->
     <div id="sim-liste" class="space-y-3"></div>
+  </div>
+</div>
+
+<!-- ─── DRILL-DOWN MODAL ─────────────────────────────────────────────────── -->
+<div id="drilldown-overlay" class="hidden" onclick="if(event.target===this)closeDrillDown()">
+  <div id="drilldown-card" class="card">
+    <!-- Header -->
+    <div class="flex items-start justify-between p-5 border-b border-slate-700 shrink-0 gap-4">
+      <div class="min-w-0">
+        <div class="flex items-center gap-3 flex-wrap">
+          <h2 id="dd-title" class="text-base font-semibold text-slate-100"></h2>
+          <span id="dd-sk-tag" class="tag hidden"></span>
+        </div>
+        <p id="dd-subtitle" class="text-xs text-slate-400 mt-1"></p>
+      </div>
+      <button onclick="closeDrillDown()" title="Schließen"
+              class="shrink-0 text-slate-400 hover:text-white text-lg leading-none w-8 h-8 flex items-center justify-center rounded hover:bg-slate-700">✕</button>
+    </div>
+    <!-- Body (scrollable) -->
+    <div id="dd-body" class="overflow-y-auto flex-1 p-5"></div>
+    <!-- Footer -->
+    <div id="dd-footer" class="shrink-0 border-t border-slate-700 px-5 py-3 flex items-center justify-between text-sm text-slate-400">
+      <span id="dd-footer-count"></span>
+      <span id="dd-footer-total" class="font-semibold text-slate-200"></span>
+    </div>
   </div>
 </div>
 
@@ -353,13 +387,24 @@ function renderTreemap() {
     text: texts,
     textinfo: "label+text",
     marker: { colors, line: { color: "#0f172a", width: 1 } },
-    hovertemplate: "<b>%{label}</b><br>%{text}<extra></extra>",
+    hovertemplate: "<b>%{label}</b><br>%{text}<br><i>Klicken für Details</i><extra></extra>",
     branchvalues: "remainder",
   }], {
     ...DARK_LAYOUT,
     height: 380,
     margin: { t: 10, b: 10, l: 5, r: 5 },
   }, CFG);
+
+  // Drill-Down: Klick auf TP- oder SK-Block öffnet Produktliste
+  const tmEl = document.getElementById("chart-treemap");
+  tmEl.removeAllListeners && tmEl.removeAllListeners("plotly_click");
+  tmEl.on("plotly_click", function(data) {
+    const pt = data.points[0];
+    if (!pt || !pt.id || pt.id === "ROOT") return;
+    const m = pt.id.match(/^tp_(\d+)(?:_(.+))?$/);
+    if (!m) return;
+    openDrillDown(m[1], m[2] || null);
+  });
 }
 
 // ── BAR CHART: Saldo je TP ────────────────────────────────────────────────
@@ -657,6 +702,92 @@ function skTagClass(code) {
 function escHtml(s) {
   return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
+
+// ── DRILL-DOWN MODAL ──────────────────────────────────────────────────────
+function openDrillDown(tpNr, skFilter) {
+  const tp = DATA.teilplaene.find(t => t.tp_nr === tpNr);
+  if (!tp) return;
+
+  // Produkte filtern und sortieren
+  let produkte = (DATA.simulator_produkte || []).filter(p => p.tp_nr === tpNr);
+  if (skFilter) produkte = produkte.filter(p => p.steuerungs_code === skFilter);
+  const mitBudget  = produkte.filter(p => p.kk5_2025 > 0).sort((a, b) => b.kk5_2025 - a.kk5_2025);
+  const ohneBudget = produkte.filter(p => p.kk5_2025 <= 0).sort((a, b) => a.bezeichnung.localeCompare(b.bezeichnung));
+  const gezeigt    = [...mitBudget, ...ohneBudget];
+
+  const totalBudget = mitBudget.reduce((s, p) => s + p.kk5_2025, 0);
+  const maxBudget   = mitBudget.length > 0 ? mitBudget[0].kk5_2025 : 1;
+
+  // Titel & Subtitle
+  document.getElementById("dd-title").textContent = tp.tp_name;
+
+  const skTagEl = document.getElementById("dd-sk-tag");
+  if (skFilter) {
+    skTagEl.textContent  = SK_LABEL[skFilter] || skFilter;
+    skTagEl.className    = "tag " + skTagClass(skFilter);
+    skTagEl.classList.remove("hidden");
+  } else {
+    skTagEl.classList.add("hidden");
+  }
+
+  const skBreakdown = !skFilter
+    ? Object.entries(tp.aufwendungen_nach_steuerung || {})
+        .filter(([, v]) => v > 0)
+        .sort((a, b) => b[1] - a[1])
+        .map(([code, v]) => `<span class="tag ${skTagClass(code)} mr-1">${SK_LABEL[code]}</span> ${fmtMio(v)}`)
+        .join(" &nbsp; ")
+    : "";
+  document.getElementById("dd-subtitle").innerHTML =
+    skBreakdown || `${mitBudget.length} Produkte mit Budget · ${fmtMio(totalBudget)}`;
+
+  // Tabelle aufbauen
+  let html = `<table class="w-full text-sm">
+    <thead class="text-left text-slate-400">
+      <tr>
+        <th class="pr-3 font-medium">Nr.</th>
+        <th class="pr-3 font-medium">Bezeichnung</th>
+        <th class="pr-3 font-medium">Typ</th>
+        <th class="text-right font-medium">Budget 2025</th>
+        <th class="pl-4 w-24"></th>
+      </tr>
+    </thead>
+    <tbody>`;
+
+  gezeigt.forEach(p => {
+    const hatBudget = p.kk5_2025 > 0;
+    const barW      = hatBudget ? Math.round((p.kk5_2025 / maxBudget) * 80) : 0;
+    const dimmed    = hatBudget ? "" : " opacity-40";
+    html += `<tr class="${dimmed}">
+      <td class="pr-3 text-slate-500 font-mono text-xs align-middle" style="white-space:nowrap">${escHtml(p.produkt_nummer)}</td>
+      <td class="pr-3 text-slate-200 align-middle">${escHtml(p.bezeichnung)}</td>
+      <td class="pr-3 align-middle"><span class="tag ${skTagClass(p.steuerungs_code)}">${SK_LABEL[p.steuerungs_code] || p.steuerungs_code}</span></td>
+      <td class="text-right align-middle font-mono text-slate-300" style="white-space:nowrap">${hatBudget ? fmtMio(p.kk5_2025) : "–"}</td>
+      <td class="pl-4 align-middle">
+        ${hatBudget ? `<span class="bar-mini" style="width:${barW}px;opacity:0.7;"></span>` : ""}
+      </td>
+    </tr>`;
+  });
+
+  html += `</tbody></table>`;
+  document.getElementById("dd-body").innerHTML = html;
+
+  // Footer
+  document.getElementById("dd-footer-count").textContent =
+    `${gezeigt.length} Produkte (${mitBudget.length} mit Budget)`;
+  document.getElementById("dd-footer-total").textContent =
+    `Gesamt KK5: ${fmtMio(totalBudget)}`;
+
+  document.getElementById("drilldown-overlay").classList.remove("hidden");
+}
+
+function closeDrillDown() {
+  document.getElementById("drilldown-overlay").classList.add("hidden");
+}
+
+// Escape-Taste schließt Modal
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") closeDrillDown();
+});
 </script>
 </body>
 </html>
