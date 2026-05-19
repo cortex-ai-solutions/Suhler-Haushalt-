@@ -190,8 +190,8 @@
       </div>
     </div>
     <div class="warn-box mb-3 hidden" id="jv-etl-warn">
-      <div class="font-semibold text-amber-400 mb-1">⚠ ETL-Hinweis: 2024-KK5 möglicherweise untererfasst</div>
-      <div class="text-sm text-amber-200">Die 2024-Pipeline erfasst KK5 strukturell um ~10,3 Mio. unter GT (Haushaltssatzung §1: 133,8 Mio. vs. ETL: 123,5 Mio.). Deltas in diesem Teilplan sollten gegen den offiziellen Haushaltsplan verifiziert werden.</div>
+      <div class="font-semibold text-amber-400 mb-1">ℹ Hinweis: Strukturelle Umgliederung 2024→2025 in TP11</div>
+      <div class="text-sm text-amber-200">Im TP11 (KJF) wurden Kita-Fördermittel zwischen 2024 und 2025 umgegliedert: Einzelleistungen (365510–365590) wurden teilweise in die Hauptposition 365500 konsolidiert. Deltas spiegeln diese Reorganisation wider – keine realen Mehrausgaben in der ausgewiesenen Höhe.</div>
     </div>
     <div class="note mb-3" id="jv-dd-subtitle"></div>
     <div class="overflow-x-auto" id="jv-dd-body"></div>
@@ -1204,9 +1204,9 @@ function showJVDrilldown(tpNr) {
   const tpB = DATA.by_year[String(jvVergl)].teilplaene.find(t => t.tp_nr === tpNr);
   const tpName = (tpA || tpB)?.tp_name || "TP " + tpNr;
 
-  // ETL-Warnung bei 2024-Vergleich (KK5-Untererfassung bekannt)
+  // Hinweis nur bei TP11 im 2024-Vergleich (Umgliederung Kita-Fördermittel)
   const warnEl = document.getElementById("jv-etl-warn");
-  const showWarn = (jvBasis === 2024 || jvVergl === 2024);
+  const showWarn = tpNr === "11" && (jvBasis === 2024 || jvVergl === 2024);
   warnEl.classList.toggle("hidden", !showWarn);
 
   const produkte = DATA.simulator_produkte.filter(p => p.tp_nr === tpNr);
