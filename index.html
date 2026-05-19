@@ -93,6 +93,7 @@
 <!-- ─── TABS ──────────────────────────────────────────────────────────── -->
 <div class="tabbar" id="tabbar">
   <div class="tab active" data-tab="overview">Überblick</div>
+  <div class="tab" data-tab="jahresvergleich">Jahresvergleich</div>
   <div class="tab" data-tab="zeitreihe">Zeitreihe</div>
   <div class="tab" data-tab="simulator">Konsolidierungs-Simulator</div>
 </div>
@@ -137,12 +138,64 @@
   </div>
 </div>
 
+<!-- ══════════ TAB: JAHRESVERGLEICH ══════════ -->
+<div id="tab-jahresvergleich" class="hidden">
+
+  <!-- Jahres-Auswahl -->
+  <div class="card p-4 mb-6 flex flex-wrap items-center gap-6">
+    <div class="flex items-center gap-3">
+      <span class="text-xs text-slate-400 uppercase tracking-wider shrink-0">Basis-Jahr:</span>
+      <div id="jv-basis-picker" class="flex gap-1.5"></div>
+    </div>
+    <span class="text-slate-600 text-xl">→</span>
+    <div class="flex items-center gap-3">
+      <span class="text-xs text-slate-400 uppercase tracking-wider shrink-0">Vergleichs-Jahr:</span>
+      <div id="jv-vergl-picker" class="flex gap-1.5"></div>
+    </div>
+    <div class="ml-auto text-sm text-slate-400 font-mono" id="jv-summary"></div>
+  </div>
+
+  <!-- Ertragsquellen Vergleich -->
+  <div class="card p-5 mb-6">
+    <div class="section-title mb-1">Ertragsquellen: <span id="jv-eq-title" class="text-blue-400 font-normal"></span></div>
+    <div class="note mb-3">Sortiert nach absolutem Zuwachs</div>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-0">
+      <div class="lg:col-span-2" id="jv-eq-grouped" style="min-height:240px;"></div>
+      <div id="jv-eq-delta" style="min-height:240px;"></div>
+    </div>
+    <div class="note mt-1">Links: Absolutwerte Basis/Vergleich · Rechts: Δ (Vergleich − Basis)</div>
+  </div>
+
+  <!-- TP-Aufwendungen Vergleich -->
+  <div class="card p-5 mb-6">
+    <div class="section-title mb-1">Aufwendungen je Teilplan: <span id="jv-tp-title" class="text-blue-400 font-normal"></span></div>
+    <div class="note mb-3 text-sky-600">← Klicken Sie auf einen Balken für Produktdetails</div>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-0">
+      <div class="lg:col-span-2" id="jv-tp-grouped" style="min-height:380px;"></div>
+      <div id="jv-tp-delta" style="min-height:380px;"></div>
+    </div>
+    <div class="note mt-1">Links: Absolutwerte · Rechts: Δ · Grün = gesunken · Rot = gestiegen</div>
+  </div>
+
+  <!-- Produkt Drill-Down -->
+  <div class="card p-5 mb-6 hidden" id="jv-drilldown">
+    <div class="flex items-center justify-between mb-3">
+      <div class="section-title mb-0" id="jv-dd-title">Produkt-Vergleich</div>
+      <button onclick="document.getElementById('jv-drilldown').classList.add('hidden')"
+              class="text-slate-400 hover:text-white text-lg leading-none w-8 h-8 flex items-center justify-center rounded hover:bg-slate-700">✕</button>
+    </div>
+    <div class="note mb-3" id="jv-dd-subtitle"></div>
+    <div class="overflow-x-auto" id="jv-dd-body"></div>
+  </div>
+
+</div>
+
 <!-- ══════════ TAB: ZEITREIHE ══════════ -->
 <div id="tab-zeitreihe" class="hidden">
   <div class="card p-5 mb-6">
-    <div class="section-title">Erträge & Aufwendungen 2023–2028</div>
+    <div class="section-title">Erträge & Aufwendungen 2022–2028</div>
     <div id="chart-zeitreihe" class="plotly-chart" style="min-height:420px;"></div>
-    <div class="note mt-2">Schraffiert = Finanzplanung (Prognose). Quelle: Haushaltsplan Suhl 2025</div>
+    <div class="note mt-2">Schraffiert = Finanzplanung (Prognose). Quellen: Haushaltspläne Suhl 2024 &amp; 2025</div>
   </div>
 </div>
 
@@ -755,15 +808,17 @@ function resetSimulator() {
 
 // ── TABS ──────────────────────────────────────────────────────────────────
 function setupTabs() {
+  const TABS = ["overview", "jahresvergleich", "zeitreihe", "simulator"];
   document.querySelectorAll("#tabbar .tab").forEach(tab => {
     tab.addEventListener("click", () => {
       document.querySelectorAll("#tabbar .tab").forEach(t => t.classList.remove("active"));
       tab.classList.add("active");
       const name = tab.dataset.tab;
-      document.getElementById("tab-overview").classList.toggle("hidden", name !== "overview");
-      document.getElementById("tab-zeitreihe").classList.toggle("hidden", name !== "zeitreihe");
-      document.getElementById("tab-simulator").classList.toggle("hidden", name !== "simulator");
+      TABS.forEach(t => document.getElementById("tab-" + t).classList.toggle("hidden", name !== t));
       if (name === "zeitreihe") renderZeitreihe();
+      if (name === "jahresvergleich") {
+        if (!jvInit) { initJahresvergleich(); jvInit = true; } else renderJahresvergleich();
+      }
     });
   });
 }
@@ -924,6 +979,254 @@ function showMittelflussDetail(eq) {
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") closeDrillDown();
 });
+
+// ══════════════════════════════════════════════════════
+// ── JAHRESVERGLEICH ───────────────────────────────────
+// ══════════════════════════════════════════════════════
+
+let jvInit    = false;
+let jvBasis   = 2024;
+let jvVergl   = 2025;
+let jvAktivTP = null;
+
+const JV_FARBE_BASIS  = "#64748b";
+const JV_FARBE_VERGL  = "#3b82f6";
+const JV_FARBE_PLUS   = "#10b981";
+const JV_FARBE_MINUS  = "#ef4444";
+
+function jvShortEq(g) {
+  return g.replace(" & FAG-Ausgleich","").replace(" & Steueranteile","")
+          .replace("Soziale Erstattungen (SGB)","Soz. Erstattungen")
+          .replace(" & Beteiligungen","").replace(" & Entgelte","");
+}
+
+function jvShortTP(n) {
+  return n.replace("Kinder-, Jugend- & Familienhilfe","KJF-Hilfe")
+          .replace("Einrichtungen Sozialdezernat","Einr. Sozialdezernat")
+          .replace("Personal / Zentrale Dienste","Personal / ZD")
+          .replace("Öffentliche Flächen & Straßen","Fl. & Straßen");
+}
+
+function getKK5(p, jahr) {
+  return jahr === 2025 ? (p.kk5_2025 || 0) : (p.kk5_2024 || 0);
+}
+
+function buildJVPicker(containerId, active, onChange) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = "";
+  const years = Object.keys(DATA.by_year).map(Number).sort();
+  years.forEach(yr => {
+    const isActive = yr === active;
+    const btn = document.createElement("button");
+    btn.textContent = yr;
+    btn.className = [
+      "text-sm px-3 py-1 rounded-full border transition-colors",
+      isActive ? "border-blue-400 text-slate-100 bg-blue-950"
+               : "border-slate-600 text-slate-400 hover:border-blue-400 hover:text-slate-200",
+    ].join(" ");
+    btn.onclick = () => { onChange(yr); };
+    el.appendChild(btn);
+  });
+}
+
+function initJahresvergleich() {
+  buildJVPicker("jv-basis-picker", jvBasis, yr => { jvBasis = yr; rebuildJVPickers(); renderJahresvergleich(); });
+  buildJVPicker("jv-vergl-picker", jvVergl, yr => { jvVergl = yr; rebuildJVPickers(); renderJahresvergleich(); });
+  renderJahresvergleich();
+}
+
+function rebuildJVPickers() {
+  buildJVPicker("jv-basis-picker", jvBasis, yr => { jvBasis = yr; rebuildJVPickers(); renderJahresvergleich(); });
+  buildJVPicker("jv-vergl-picker", jvVergl, yr => { jvVergl = yr; rebuildJVPickers(); renderJahresvergleich(); });
+}
+
+function renderJahresvergleich() {
+  if (jvBasis === jvVergl) {
+    ["jv-eq-grouped","jv-eq-delta","jv-tp-grouped","jv-tp-delta"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.innerHTML = '<div class="text-slate-500 p-4">Bitte zwei verschiedene Jahre wählen.</div>'; }
+    });
+    document.getElementById("jv-drilldown").classList.add("hidden");
+    return;
+  }
+  const label = `${jvBasis} → ${jvVergl}`;
+  document.getElementById("jv-eq-title").textContent = label;
+  document.getElementById("jv-tp-title").textContent = label;
+
+  const bdA = DATA.by_year[String(jvBasis)];
+  const bdB = DATA.by_year[String(jvVergl)];
+  const metaA = bdA.meta, metaB = bdB.meta;
+  const dErt = (metaB.ertraege_soll - metaA.ertraege_soll) / 1e6;
+  const dAuf = (metaB.aufwendungen_soll - metaA.aufwendungen_soll) / 1e6;
+  document.getElementById("jv-summary").innerHTML =
+    `GT Erträge ${dErt >= 0 ? "+" : ""}${fmt(dErt,1)} Mio. &nbsp;|&nbsp; GT Aufwendungen ${dAuf >= 0 ? "+" : ""}${fmt(dAuf,1)} Mio.`;
+
+  renderJVErtragsquellen();
+  renderJVTeilplaene();
+  if (jvAktivTP) showJVDrilldown(jvAktivTP);
+  else document.getElementById("jv-drilldown").classList.add("hidden");
+}
+
+function renderJVErtragsquellen() {
+  const eqA = DATA.by_year[String(jvBasis)].ertragsquellen;
+  const eqB = DATA.by_year[String(jvVergl)].ertragsquellen;
+  const allGruppen = [...new Set([...eqA.map(e => e.gruppe), ...eqB.map(e => e.gruppe)])];
+  const getB = (arr, g) => (arr.find(e => e.gruppe === g) || { betrag: 0 }).betrag;
+
+  const rows = allGruppen.map(g => ({
+    label: jvShortEq(g),
+    a: getB(eqA, g),
+    b: getB(eqB, g),
+    d: getB(eqB, g) - getB(eqA, g),
+  })).sort((x, y) => Math.abs(y.d) - Math.abs(x.d));
+
+  const ys    = rows.map(r => r.label);
+  const darkL = { ...DARK_LAYOUT, margin: { t: 10, b: 30, l: 10, r: 10 } };
+
+  Plotly.newPlot("jv-eq-grouped", [
+    { type: "bar", orientation: "h", name: String(jvBasis),
+      x: rows.map(r => r.a), y: ys, marker: { color: JV_FARBE_BASIS },
+      hovertemplate: `<b>%{y}</b><br>${jvBasis}: %{x:,.0f} €<extra></extra>` },
+    { type: "bar", orientation: "h", name: String(jvVergl),
+      x: rows.map(r => r.b), y: ys, marker: { color: JV_FARBE_VERGL },
+      hovertemplate: `<b>%{y}</b><br>${jvVergl}: %{x:,.0f} €<extra></extra>` },
+  ], { ...darkL, barmode: "group", height: 240,
+       xaxis: { tickformat: "~s", gridcolor: "#334155" },
+       yaxis: { automargin: true },
+       legend: { orientation: "h", y: -0.15 } }, CFG);
+
+  Plotly.newPlot("jv-eq-delta", [{
+    type: "bar", orientation: "h", name: "Δ",
+    x: rows.map(r => r.d), y: ys,
+    marker: { color: rows.map(r => r.d >= 0 ? JV_FARBE_PLUS : JV_FARBE_MINUS) },
+    text: rows.map(r => (r.d >= 0 ? "+" : "") + fmtMio(r.d)),
+    textposition: "auto",
+    hovertemplate: `<b>%{y}</b><br>Δ: %{x:,.0f} €<extra></extra>`,
+  }], { ...darkL, height: 240,
+        xaxis: { tickformat: "~s", gridcolor: "#334155", zeroline: true, zerolinecolor: "#475569" },
+        yaxis: { visible: false },
+        showlegend: false }, CFG);
+}
+
+function renderJVTeilplaene() {
+  const tpA = DATA.by_year[String(jvBasis)].teilplaene;
+  const tpB = DATA.by_year[String(jvVergl)].teilplaene;
+  const getTP = (arr, nr) => arr.find(t => t.tp_nr === nr) || { aufwendungen: 0 };
+
+  const allNrs = [...new Set([...tpA.map(t => t.tp_nr), ...tpB.map(t => t.tp_nr)])];
+  const rows = allNrs.map(nr => {
+    const a = getTP(tpA, nr), b = getTP(tpB, nr);
+    const name = jvShortTP(a.tp_name || b.tp_name || "TP " + nr);
+    return { nr, label: name, a: a.aufwendungen, b: b.aufwendungen, d: b.aufwendungen - a.aufwendungen };
+  }).sort((x, y) => Math.abs(y.d) - Math.abs(x.d));
+
+  const ys    = rows.map(r => r.label);
+  const darkL = { ...DARK_LAYOUT, margin: { t: 10, b: 30, l: 10, r: 10 } };
+
+  const tGrp = Plotly.newPlot("jv-tp-grouped", [
+    { type: "bar", orientation: "h", name: String(jvBasis),
+      x: rows.map(r => r.a), y: ys, marker: { color: JV_FARBE_BASIS },
+      hovertemplate: `<b>%{y}</b><br>${jvBasis}: %{x:,.0f} €<extra></extra>` },
+    { type: "bar", orientation: "h", name: String(jvVergl),
+      x: rows.map(r => r.b), y: ys, marker: { color: JV_FARBE_VERGL },
+      hovertemplate: `<b>%{y}</b><br>${jvVergl}: %{x:,.0f} €<extra></extra>` },
+  ], { ...darkL, barmode: "group", height: 380,
+       xaxis: { tickformat: "~s", gridcolor: "#334155" },
+       yaxis: { automargin: true },
+       legend: { orientation: "h", y: -0.1 } }, CFG);
+
+  tGrp.then(() => {
+    const el = document.getElementById("jv-tp-grouped");
+    el.removeAllListeners && el.removeAllListeners("plotly_click");
+    el.on("plotly_click", evt => {
+      const pt = evt.points[0];
+      const label = pt.y;
+      const row = rows.find(r => r.label === label);
+      if (row) showJVDrilldown(row.nr);
+    });
+  });
+
+  Plotly.newPlot("jv-tp-delta", [{
+    type: "bar", orientation: "h", name: "Δ",
+    x: rows.map(r => r.d), y: ys,
+    marker: { color: rows.map(r => r.d <= 0 ? JV_FARBE_PLUS : JV_FARBE_MINUS) },
+    text: rows.map(r => (r.d >= 0 ? "+" : "") + fmtMio(r.d)),
+    textposition: "auto",
+    hovertemplate: `<b>%{y}</b><br>Δ Aufwand: %{x:,.0f} €<extra></extra>`,
+  }], { ...darkL, height: 380,
+        xaxis: { tickformat: "~s", gridcolor: "#334155", zeroline: true, zerolinecolor: "#475569" },
+        yaxis: { visible: false },
+        showlegend: false }, CFG).then(() => {
+    const el = document.getElementById("jv-tp-delta");
+    el.removeAllListeners && el.removeAllListeners("plotly_click");
+    el.on("plotly_click", evt => {
+      const label = evt.points[0]?.y;
+      const row = rows.find(r => r.label === label);
+      if (row) showJVDrilldown(row.nr);
+    });
+  });
+}
+
+function showJVDrilldown(tpNr) {
+  jvAktivTP = tpNr;
+  const tpA = DATA.by_year[String(jvBasis)].teilplaene.find(t => t.tp_nr === tpNr);
+  const tpB = DATA.by_year[String(jvVergl)].teilplaene.find(t => t.tp_nr === tpNr);
+  const tpName = (tpA || tpB)?.tp_name || "TP " + tpNr;
+
+  const produkte = DATA.simulator_produkte.filter(p => p.tp_nr === tpNr);
+  const rows = produkte.map(p => {
+    const a = getKK5(p, jvBasis);
+    const b = getKK5(p, jvVergl);
+    const d = b - a;
+    const pct = a > 0 ? (d / a * 100) : null;
+    return { p, a, b, d, pct };
+  }).sort((x, y) => Math.abs(y.d) - Math.abs(x.d));
+
+  const totalA = rows.reduce((s, r) => s + r.a, 0);
+  const totalB = rows.reduce((s, r) => s + r.b, 0);
+  const totalD = totalB - totalA;
+
+  document.getElementById("jv-dd-title").textContent = `Produkt-Vergleich: ${tpName}`;
+  document.getElementById("jv-dd-subtitle").innerHTML =
+    `${jvBasis}: ${fmtMio(totalA)} &nbsp;→&nbsp; ${jvVergl}: ${fmtMio(totalB)} &nbsp;|&nbsp; ` +
+    `<span class="${totalD >= 0 ? "text-rose-400" : "text-emerald-400"}">${totalD >= 0 ? "+" : ""}${fmtMio(totalD)}</span> &nbsp;· ` +
+    `${rows.length} Produkte · sortiert nach |Δ|`;
+
+  let html = `<table class="w-full text-xs">
+    <thead class="text-left text-slate-400">
+      <tr>
+        <th class="pr-2 pb-2 font-medium">Nr.</th>
+        <th class="pr-3 pb-2 font-medium">Bezeichnung</th>
+        <th class="pr-2 pb-2 font-medium">Typ</th>
+        <th class="text-right pr-2 pb-2 font-medium">${jvBasis}</th>
+        <th class="text-right pr-2 pb-2 font-medium">${jvVergl}</th>
+        <th class="text-right pr-2 pb-2 font-medium">Δ abs.</th>
+        <th class="text-right pb-2 font-medium">Δ %</th>
+      </tr>
+    </thead><tbody>`;
+
+  rows.forEach(({ p, a, b, d, pct }) => {
+    const dColor = d > 0 ? "text-rose-400" : d < 0 ? "text-emerald-400" : "text-slate-500";
+    const dStr   = d !== 0 ? (d > 0 ? "+" : "") + fmtMio(d) : "–";
+    const pStr   = pct !== null ? (pct > 0 ? "+" : "") + fmt(pct, 1) + "%" : "–";
+    html += `<tr class="border-b border-slate-700/40 hover:bg-slate-700/20">
+      <td class="pr-2 py-1.5 font-mono text-slate-500">${escHtml(p.produkt_nummer)}</td>
+      <td class="pr-3 py-1.5 text-slate-200">${escHtml(p.bezeichnung)}</td>
+      <td class="pr-2 py-1.5"><span class="tag ${skTagClass(p.steuerungs_code)}">${SK_LABEL[p.steuerungs_code] || p.steuerungs_code}</span></td>
+      <td class="text-right pr-2 py-1.5 font-mono text-slate-400">${a > 0 ? fmtMio(a) : "–"}</td>
+      <td class="text-right pr-2 py-1.5 font-mono text-slate-400">${b > 0 ? fmtMio(b) : "–"}</td>
+      <td class="text-right pr-2 py-1.5 font-mono ${dColor}">${dStr}</td>
+      <td class="text-right py-1.5 font-mono ${dColor}">${pStr}</td>
+    </tr>`;
+  });
+
+  html += `</tbody></table>`;
+
+  document.getElementById("jv-dd-body").innerHTML = html;
+  const dd = document.getElementById("jv-drilldown");
+  dd.classList.remove("hidden");
+  dd.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
 </script>
 </body>
 </html>

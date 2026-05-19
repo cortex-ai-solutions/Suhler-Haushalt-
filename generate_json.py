@@ -439,8 +439,9 @@ def main():
     result["teilplaene"]    = by_year["2025"]["teilplaene"]
     result["ertragsquellen"] = by_year["2025"]["ertragsquellen"]
 
-    # ── Zeitreihe (aus 2025-ETL-Sicht: IST 2023, Ansatz 2024/2025, FP 2026-2028)
+    # ── Zeitreihe (IST 2022 aus 2024-ETL + 2025-ETL-Sicht)
     jahre_zt = [
+        (2022, "IST_ERGEBNIS",   "Ist 2022",     False),
         (2023, "IST_ERGEBNIS",   "Ist 2023",     False),
         (2024, "ANSATZ_VORJAHR", "Ansatz 2024",  False),
         (2025, "PLAN_ANSATZ",    "Ansatz 2025",  False),
@@ -475,7 +476,12 @@ def main():
                 JOIN konten k ON h.konto_id=k.id
                 JOIN kontenklassen kk ON k.kontenklasse_id=kk.id
                 WHERE h.produkt_id=p.id AND h.daten_jahr=2025
-                  AND h.wert_typ='PLAN_ANSATZ' AND kk.nummer=5) AS kk5
+                  AND h.wert_typ='PLAN_ANSATZ' AND kk.nummer=5) AS kk5,
+               (SELECT COALESCE(SUM(h.betrag),0) FROM haushaltswerte h
+                JOIN konten k ON h.konto_id=k.id
+                JOIN kontenklassen kk ON k.kontenklasse_id=kk.id
+                WHERE h.produkt_id=p.id AND h.daten_jahr=2024
+                  AND h.wert_typ='PLAN_ANSATZ' AND kk.nummer=5) AS kk5_2024
         FROM produkte p
         JOIN steuerungs_kategorien sk ON p.steuerungs_kategorie_id=sk.id
         JOIN teilplaene t ON p.teilplan_id=t.id
@@ -492,6 +498,7 @@ def main():
             "tp_nr":                 r["tp_nr"],
             "tp_name":               TP_NAMEN_SCHOEN.get(r["tp_nr"], r["tp_bez"]),
             "kk5_2025":              round(r["kk5"], 2),
+            "kk5_2024":              round(r["kk5_2024"], 2),
         })
     result["simulator_produkte"] = sim
 
