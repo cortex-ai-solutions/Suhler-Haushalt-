@@ -95,14 +95,9 @@
 
     <!-- Mittelfluss-Detail Panel -->
     <div class="card p-5 flex flex-col" id="mittelfluss-panel">
-      <div class="section-title mb-3">Mittelfluss-Detail</div>
-      <div id="mf-placeholder" class="flex-1 flex items-center justify-center text-slate-500 text-sm">
-        <div class="text-center leading-relaxed">
-          <div class="text-3xl mb-3 opacity-30">←</div>
-          <div>Klicken Sie auf eine Ertragsquelle<br>im Sankey-Diagramm links</div>
-        </div>
-      </div>
-      <div id="mf-detail" class="hidden flex-1 overflow-y-auto pr-1"></div>
+      <div class="section-title mb-2">Mittelfluss-Detail</div>
+      <div id="mf-selector" class="flex flex-wrap gap-1.5 mb-3 shrink-0"></div>
+      <div id="mf-detail" class="flex-1 overflow-y-auto pr-1"></div>
     </div>
 
   </div>
@@ -275,8 +270,26 @@ function init() {
   setupTabs();
   document.getElementById("toggle-gestaltbar").addEventListener("change", renderTreemap);
   document.getElementById("generiert-am").textContent = "Stand: " + new Date(DATA.meta.generiert_am).toLocaleDateString("de-DE");
+  buildMfSelector();
   const defaultEq = DATA.ertragsquellen.find(e => e.gruppe.toLowerCase().includes("schlüssel")) || DATA.ertragsquellen[0];
   if (defaultEq) showMittelflussDetail(defaultEq);
+}
+
+function buildMfSelector() {
+  const sel = document.getElementById("mf-selector");
+  sel.innerHTML = "";
+  DATA.ertragsquellen.forEach(eq => {
+    const shortName = eq.gruppe
+      .replace(" & FAG-Ausgleich", "").replace(" & Steueranteile", "")
+      .replace(" & Beteiligungen", "").replace(" & Entgelte", "").replace(" (SGB)", "");
+    const btn = document.createElement("button");
+    btn.dataset.gruppe = eq.gruppe;
+    btn.title = eq.gruppe;
+    btn.textContent = shortName;
+    btn.className = "mf-pill text-xs px-2.5 py-1 rounded-full border border-slate-600 text-slate-400 hover:border-blue-400 hover:text-slate-200 transition-colors whitespace-nowrap";
+    btn.onclick = () => showMittelflussDetail(eq);
+    sel.appendChild(btn);
+  });
 }
 
 // ── KPI ───────────────────────────────────────────────────────────────────
@@ -356,8 +369,13 @@ function renderSankey() {
   sankeyEl.on("plotly_click", function(eventData) {
     const pt = eventData.points[0];
     if (!pt) return;
-    const found = DATA.ertragsquellen.find(e => e.gruppe === pt.label);
-    if (found) showMittelflussDetail(found);
+    // Knoten-Klick: pt.label ist der Node-Label
+    let eq = DATA.ertragsquellen.find(e => e.gruppe === pt.label);
+    // Link-Klick: pt.source.label ist der Quell-Knoten (feuert zuverlässig)
+    if (!eq && pt.source && pt.source.label) {
+      eq = DATA.ertragsquellen.find(e => e.gruppe === pt.source.label);
+    }
+    if (eq) showMittelflussDetail(eq);
   });
 }
 
@@ -847,10 +865,18 @@ function showMittelflussDetail(eq) {
     <span class="text-sky-600 cursor-pointer">Im Sankey links auf eine andere Ertragsquelle klicken zum Wechseln</span>
   </div>`;
 
-  document.getElementById("mf-placeholder").classList.add("hidden");
-  const detail = document.getElementById("mf-detail");
-  detail.innerHTML = html;
-  detail.classList.remove("hidden");
+  // Aktive Pill hervorheben
+  document.querySelectorAll(".mf-pill").forEach(btn => {
+    const active = btn.dataset.gruppe === eq.gruppe;
+    btn.classList.toggle("border-blue-400",  active);
+    btn.classList.toggle("text-slate-100",   active);
+    btn.classList.toggle("bg-blue-950",      active);
+    btn.classList.toggle("border-slate-600", !active);
+    btn.classList.toggle("text-slate-400",   !active);
+    btn.classList.toggle("bg-transparent",   !active);
+  });
+
+  document.getElementById("mf-detail").innerHTML = html;
 }
 
 // Escape-Taste schließt Modal
