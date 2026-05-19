@@ -714,6 +714,11 @@ function renderSimListe() {
           <span id="sav-${p.produkt_nummer}" class="text-emerald-400">${cur > 0 ? '−'+fmtMio(p.kk5_2025 * cur / 100) : ''}</span>
         </div>
       </div>
+      ${p.rechtsgrundlage ? `
+      <details class="mt-2">
+        <summary class="text-xs text-slate-500 cursor-pointer hover:text-slate-300 select-none py-0.5">§ Rechtsgrundlage</summary>
+        <div class="mt-1 text-xs text-slate-400 leading-relaxed border-l-2 border-slate-600 pl-2">${escHtml(p.rechtsgrundlage)}</div>
+      </details>` : ''}
     `;
     liste.appendChild(div);
   });
@@ -1245,7 +1250,8 @@ function showJVDrilldown(tpNr) {
     const dColor = d > 0 ? "text-rose-400" : d < 0 ? "text-emerald-400" : "text-slate-500";
     const dStr   = d !== 0 ? (d > 0 ? "+" : "") + fmtMio(d) : "–";
     const pStr   = pct !== null ? (pct > 0 ? "+" : "") + fmt(pct, 1) + "%" : "–";
-    html += `<tr class="border-b border-slate-700/40 hover:bg-slate-700/20">
+    const rgId   = "jvrg-" + p.produkt_nummer;
+    html += `<tr class="border-b border-slate-700/40 hover:bg-slate-700/20 cursor-pointer" onclick="toggleJVDetail('${p.produkt_nummer}')">
       <td class="pr-2 py-1.5 font-mono text-slate-500">${escHtml(p.produkt_nummer)}</td>
       <td class="pr-3 py-1.5 text-slate-200">${escHtml(p.bezeichnung)}</td>
       <td class="pr-2 py-1.5"><span class="tag ${skTagClass(p.steuerungs_code)}">${SK_LABEL[p.steuerungs_code] || p.steuerungs_code}</span></td>
@@ -1253,12 +1259,18 @@ function showJVDrilldown(tpNr) {
       <td class="text-right pr-2 py-1.5 font-mono text-slate-400">${b > 0 ? fmtMio(b) : "–"}</td>
       <td class="text-right pr-2 py-1.5 font-mono ${dColor}">${dStr}</td>
       <td class="text-right py-1.5 font-mono ${dColor}">${pStr}</td>
-    </tr>`;
+    </tr>
+    ${p.rechtsgrundlage ? `<tr id="${rgId}" class="hidden"><td colspan="7" class="px-3 py-2 text-xs text-slate-400 bg-slate-800/60 border-b border-slate-700/40"><div class="border-l-2 border-slate-600 pl-2 leading-relaxed">${escHtml(p.rechtsgrundlage)}</div></td></tr>` : ""}`;
   });
 
   html += `</tbody></table>`;
 
   document.getElementById("jv-dd-body").innerHTML = html;
+}
+
+function toggleJVDetail(pnr) {
+  const el = document.getElementById("jvrg-" + pnr);
+  if (el) el.classList.toggle("hidden");
 }
 </script>
 </body>

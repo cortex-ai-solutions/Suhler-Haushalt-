@@ -502,6 +502,33 @@ def main():
         })
     result["simulator_produkte"] = sim
 
+    # ── Gesetze-Katalog ───────────────────────────────────────────────────────
+    gesetze = []
+    for r in con.execute(
+        "SELECT kuerzel, vollname, rechtsebene, fundstelle, kernaussage FROM gesetze_katalog ORDER BY rechtsebene, kuerzel"
+    ):
+        gesetze.append({
+            "kuerzel":     r["kuerzel"],
+            "vollname":    r["vollname"],
+            "rechtsebene": r["rechtsebene"],
+            "fundstelle":  r["fundstelle"],
+            "kernaussage": r["kernaussage"],
+        })
+    result["gesetze_katalog"] = gesetze
+
+    # ── Steuerungs-Kategorien mit Rechtsgrundlage ──────────────────────────────
+    sk_list = []
+    for r in con.execute(
+        "SELECT code, bezeichnung, beschreibung, rechtsgrundlage FROM steuerungs_kategorien ORDER BY code"
+    ):
+        sk_list.append({
+            "code":          r["code"],
+            "bezeichnung":   r["bezeichnung"],
+            "beschreibung":  r["beschreibung"],
+            "rechtsgrundlage": r["rechtsgrundlage"],
+        })
+    result["steuerungs_kategorien"] = sk_list
+
     # ── Wechselwirkungen ──────────────────────────────────────────────────────
     result["wechselwirkungen"] = [
         {
