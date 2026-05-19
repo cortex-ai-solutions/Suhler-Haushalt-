@@ -185,13 +185,251 @@ KATEGORIEN = {
     "272000": ("E", "Einrichtungen Sozialdezernat, ThürKO § 2"),
 }
 
+# Pass 2: verbliebene 95 Produkte (alle mit Budget < 0,005 Mio., aber für Vollständigkeit)
+KATEGORIEN_PASS2 = {
+    # ─── TP01 ────────────────────────────────────────────────────────────────
+    "111110": ("E", "Stadtrat/Gemeindevertretung, ThürKO §§ 21 ff."),
+    "111120": ("E", "Stadtrat/Gemeindevertretung, ThürKO §§ 21 ff."),
+    "111130": ("E", "Stadtrat/Ausschüsse, ThürKO §§ 21 ff."),
+    "111140": ("E", "Bürgermeister/Verwaltungsvorstand, ThürKO §§ 28 ff."),
+    "111150": ("E", "Bürgermeister/Verwaltungsvorstand, ThürKO §§ 28 ff."),
+    "111600": ("E", "Allgemeine Verwaltungsführung, ThürKO § 2"),
+    "118000": ("E", "Sonstige allgemeine Verwaltung, ThürKO § 2"),
+    "522100": ("E", "Interne Dienstleistungen (Fuhrpark/Technik), ThürKO § 2"),
+    "523000": ("E", "Interne Dienstleistungen, ThürKO § 2"),
+
+    # ─── TP02 ────────────────────────────────────────────────────────────────
+    "424210": ("F", "Sportförderung, freiwillig"),
+    "424250": ("F", "Sportförderung, freiwillig"),
+    "252200": ("F", "Museum/Kulturpflege, freiwillig"),
+    "252400": ("F", "Kulturpflege, freiwillig"),
+    "262000": ("F", "Kulturförderung, freiwillig"),
+    "575000": ("F", "Stadtgrün/Grünanlagen, freiwillig"),
+    "575010": ("F", "Stadtgrün/Grünanlagen, freiwillig"),
+    "575020": ("F", "Stadtgrün/Grünanlagen, freiwillig"),
+
+    # ─── TP03 ────────────────────────────────────────────────────────────────
+    "114100": ("E", "Zentrale Dienstleistungen, ThürKO § 2"),
+    "114120": ("E", "Zentrale Dienstleistungen, ThürKO § 2"),
+    "114510": ("E", "Zentrale Dienstleistungen, ThürKO § 2"),
+    "114530": ("E", "Zentrale Dienstleistungen, ThürKO § 2"),
+    "114550": ("E", "Zentrale Dienstleistungen, ThürKO § 2"),
+    "114600": ("E", "Zentrale Dienstleistungen, ThürKO § 2"),
+    "121100": ("S", "Melde-/Einwohnerwesen, BMG, ThürMeldeG"),
+    "573120": ("E", "Gebäudemanagement intern, ThürKO § 2"),
+
+    # ─── TP04 ────────────────────────────────────────────────────────────────
+    "117100": ("E", "Abgabenwesen/Steuerverwaltung, ThürKAG"),
+    "117200": ("E", "Abgabenwesen/Gebühren, ThürKAG"),
+    "411200": ("E", "Wirtschaftsförderung (TP04-Kontext), ThürKO § 2"),
+
+    # ─── TP05 ────────────────────────────────────────────────────────────────
+    "542070": ("E", "Straßenunterhaltung, ThürStrG"),
+
+    # ─── TP06 ────────────────────────────────────────────────────────────────
+    "622010": ("S", "Kreditverwaltung/Schuldendienst, § 75 ThürKO"),
+
+    # ─── TP07 ────────────────────────────────────────────────────────────────
+    "121200": ("S", "Personenstandswesen/Standesamt, PStG"),
+    "121210": ("S", "Personenstandswesen, PStG"),
+    "121230": ("S", "Personenstandswesen, PStG"),
+    "121240": ("S", "Personenstandswesen, PStG"),
+    "122300": ("S", "Gewerberecht/Ordnung, GewO"),
+    "123500": ("S", "Katastrophenschutz, ThürBKG"),
+
+    # ─── TP08 ────────────────────────────────────────────────────────────────
+    "537030": ("S", "Abfallwirtschaft, KrWG, ThürAbfG"),
+    "545120": ("E", "Friedhöfe, ThürBestG"),
+
+    # ─── TP09 (SGB-gebunden → größtenteils PFLICHT_STRIKT) ──────────────────
+    "111500": ("E", "Allgemeine Verwaltung Sozialbereich, ThürKO § 2"),
+    "311100": ("S", "SGB II/XII Leistungen"),
+    "311130": ("S", "SGB XII Hilfe zum Lebensunterhalt, § 27 SGB XII"),
+    "311201": ("S", "Grundsicherung im Alter, SGB XII §§ 41 ff."),
+    "311210": ("S", "Grundsicherung, SGB XII §§ 41 ff."),
+    "311220": ("S", "Grundsicherung, SGB XII §§ 41 ff."),
+    "311230": ("S", "Grundsicherung, SGB XII §§ 41 ff."),
+    "311240": ("S", "Grundsicherung, SGB XII §§ 41 ff."),
+    "311260": ("S", "Grundsicherung, SGB XII §§ 41 ff."),
+    "311270": ("S", "Grundsicherung, SGB XII §§ 41 ff."),
+    "311280": ("S", "Grundsicherung, SGB XII §§ 41 ff."),
+    "311500": ("S", "SGB XII-Leistungen"),
+    "311510": ("S", "SGB XII-Leistungen"),
+    "311520": ("S", "SGB XII-Leistungen"),
+    "311550": ("S", "SGB XII-Leistungen"),
+    "311600": ("S", "Eingliederungshilfe SGB IX, §§ 90 ff. SGB IX"),
+    "311700": ("S", "SGB XII-Leistungen (Sonstige)"),
+    "312300": ("S", "SGB XII Hilfe in sonstigen Lebenslagen"),
+    "312600": ("S", "SGB XII-Leistungen"),
+    "316100": ("S", "Eingliederungshilfe SGB IX, §§ 90 ff. SGB IX"),
+    "316210": ("S", "Eingliederungshilfe/Teilhabe, SGB IX"),
+    "316300": ("S", "Eingliederungshilfe/Teilhabe, SGB IX"),
+    "316411": ("S", "Eingliederungshilfe/Teilhabe, SGB IX"),
+    "316412": ("S", "Eingliederungshilfe/Teilhabe, SGB IX"),
+    "316421": ("S", "Eingliederungshilfe/Teilhabe, SGB IX"),
+    "316422": ("S", "Eingliederungshilfe/Teilhabe, SGB IX"),
+    "316430": ("S", "Eingliederungshilfe/Teilhabe, SGB IX"),
+    "316440": ("S", "Eingliederungshilfe/Teilhabe, SGB IX"),
+    "316462": ("S", "Eingliederungshilfe/Teilhabe, SGB IX"),
+    "316470": ("S", "Eingliederungshilfe/Teilhabe, SGB IX"),
+    "316480": ("S", "Eingliederungshilfe/Teilhabe, SGB IX"),
+    "343000": ("S", "Soziale Leistungen (sonstige), SGB XII"),
+    "346000": ("S", "Soziale Leistungen (sonstige), SGB XII"),
+    "412000": ("E", "Gesundheitsförderung/Sport (TP09-Kontext), ThürGDG"),
+    "522200": ("E", "Interne Dienstleistungen Sozialbereich, ThürKO § 2"),
+
+    # ─── TP10 ────────────────────────────────────────────────────────────────
+    "201000": ("E", "Allgemeine Schulverwaltung, ThürSchulG"),
+    "216300": ("E", "Regelschulen Schulträger, ThürSchulG"),
+
+    # ─── TP11 ────────────────────────────────────────────────────────────────
+    "347200": ("S", "Sonstige soziale Leistungen Jugendhilfe, SGB VIII"),
+    "351500": ("S", "Öffentlicher Gesundheitsdienst (TP11-Kontext), ThürGDG"),
+    "360000": ("E", "Allgemeine Jugendhilfe/Koordination, SGB VIII § 2"),
+    "361010": ("E", "Jugendarbeit, SGB VIII § 11"),
+    "361020": ("E", "Jugendarbeit, SGB VIII § 11"),
+    "363100": ("S", "HzE ambulant (Erziehungsberatung), SGB VIII § 28"),
+    "363220": ("S", "HzE teilstationär, SGB VIII §§ 32 ff."),
+    "363240": ("S", "HzE teilstationär, SGB VIII §§ 32 ff."),
+    "363300": ("S", "HzE stationär, SGB VIII §§ 33 ff."),
+    "363310": ("S", "HzE stationär, SGB VIII §§ 33 ff."),
+    "363330": ("S", "HzE stationär (Vollzeitpflege), SGB VIII § 33"),
+    "363340": ("S", "HzE stationär, SGB VIII §§ 33 ff."),
+    "363350": ("S", "HzE stationär, SGB VIII §§ 33 ff."),
+    "363360": ("S", "HzE stationär, SGB VIII §§ 33 ff."),
+    "363410": ("S", "HzE stationär, SGB VIII §§ 34 ff."),
+    "363500": ("S", "HzE intensiv (ISE), SGB VIII § 35"),
+    "363520": ("S", "HzE intensiv, SGB VIII § 35"),
+    "363530": ("S", "HzE intensiv, SGB VIII § 35"),
+    "363540": ("S", "HzE intensiv, SGB VIII § 35"),
+    "364000": ("S", "Inobhutnahme/Eingliederungshilfe § 35a SGB VIII"),
+}
+
+
+# Pass 3: verbliebene 87 Produkte (4-stellige Originale nach Reset + übersehene 6-stellige)
+KATEGORIEN_PASS3 = {
+    # ─── 4-stellige Originale (aus CSV-Mapping, durch Reset verloren, Budget = 0) ──
+    "1110": ("E", "Verwaltungsführung und politische Gremien, ThürKO §§ 2, 21 ff."),
+    "1120": ("E", "Personal und Organisation, ThürKO § 5 ThürGemHV-Doppik"),
+    "1130": ("E", "IT/EDV, OZG, ThürEGovG"),
+    "1140": ("E", "Zentrale Dienstleistungen und Archivwesen, ThürKO § 2"),
+    "1160": ("E", "Finanzmanagement und Abgabenverwaltung, ThürKO § 92 ff."),
+    "1260": ("S", "Brandschutz/Katastrophenschutz (Querschnitt), ThürBKG"),
+    "2110": ("E", "Grundschulen Schulträger, ThürSchulG § 40"),
+    "2120": ("E", "Gemeinschaftsschulen Schulträger, ThürSchulG"),
+    "2160": ("E", "Regelschulen Schulträger, ThürSchulG"),
+    "2170": ("E", "Gymnasien Schulträger, ThürSchulG"),
+    "2210": ("E", "Förderschulen Schulträger, ThürSchulG § 44"),
+    "2310": ("E", "Berufliche Schulen Schulträger, ThürSchulG"),
+    "2410": ("E", "Schülerbeförderung, ThürSchulG § 69"),
+    "2430": ("E", "Sonstige schulische Aufgaben/Schulsozialarbeit, ThürSchulG"),
+    "2510": ("F", "Wissenschaft und Forschung, freiwillig"),
+    "2520": ("F", "Museen, bildende Kunst und Bibliotheken, freiwillig"),
+    "2610": ("F", "Theater, Orchester und Musikschulen, freiwillig"),
+    "2710": ("E", "Volkshochschule (Grundversorgung), ThürEBG"),
+    "2711": ("F", "Sonstige Kulturpflege und Brauchtum, freiwillig"),
+    "2810": ("E", "Bereitstellung Schulsportanlagen, ThürSchulG"),
+    "2811": ("F", "Vereinssportförderung und Freibäder, freiwillig"),
+    "3100": ("E", "Kommunale Eingliederungsleistungen SGB II, § 16a SGB II"),
+    "3110": ("S", "KdU SGB II, § 22 SGB II"),
+    "3120": ("S", "KdU SGB XII, §§ 35 u. 42 SGB XII"),
+    "3160": ("S", "Eingliederungshilfe SGB IX, §§ 90 u. 112 SGB IX"),
+    "3180": ("E", "Schuldnerberatung, § 11 Abs. 4 SGB XII"),
+    "3620": ("E", "Jugendarbeit (Gesamtprodukt), SGB VIII § 11"),
+    "3630": ("S", "Hilfen zur Erziehung (Gesamtprodukt), SGB VIII § 27 ff."),
+    "3650": ("S", "Kindertagesbetreuung (Gesamtprodukt), ThürKitaG"),
+    "3655": ("S", "Kindertagesbetreuung Betriebskosten, ThürKitaG § 7"),
+    "5410": ("E", "Gemeindestraßen (Gesamtprodukt), ThürStrG"),
+    "5450": ("E", "Friedhöfe (Gesamtprodukt), ThürBestG"),
+    "5510": ("E", "Naturschutz/Landschaftspflege (Gesamtprodukt), ThürNatSchG"),
+    "5520": ("E", "Gewässerpflege (Gesamtprodukt), WHG"),
+    "5530": ("E", "Umweltschutz (Gesamtprodukt), ThürNatSchG"),
+    "5610": ("E", "Stadtgrün/Grünanlagen (Gesamtprodukt), freiwillig"),
+    "311000": ("S", "SGB II/XII Leistungen (Gesamtprodukt)"),
+    "316000": ("S", "Eingliederungshilfe SGB IX (Gesamtprodukt), SGB IX"),
+
+    # ─── 6-stellige Produkte mit Budget (übersehen) ─────────────────────────
+    # TP11 Kita (365xxx = ThürKitaG § 7 → PFLICHT_STRIKT)
+    "365500": ("S", "Kita Betriebskosten freier Träger, ThürKitaG § 7"),
+    "365510": ("S", "Kita Betriebskosten, ThürKitaG § 7"),
+    "365520": ("S", "Kita Betriebskosten, ThürKitaG § 7"),
+    "365530": ("S", "Kita Betriebskosten, ThürKitaG § 7"),
+    "365540": ("S", "Kita Betriebskosten, ThürKitaG § 7"),
+    "365550": ("S", "Kita Betriebskosten, ThürKitaG § 7"),
+    "365560": ("S", "Kita Betriebskosten, ThürKitaG § 7"),
+    "365570": ("S", "Kita Betriebskosten, ThürKitaG § 7"),
+    "365580": ("S", "Kita Betriebskosten, ThürKitaG § 7"),
+    "365590": ("S", "Kita Betriebskosten, ThürKitaG § 7"),
+
+    # TP07 Feuerwehr/KatSchutz (126xxx → ThürBKG → PFLICHT_STRIKT)
+    "126010": ("S", "Feuerwehr/Brandschutz, ThürBKG § 2"),
+    "126020": ("S", "Feuerwehr/Katastrophenschutz, ThürBKG"),
+
+    # TP05 Gemeindestraßen (541xxx → ThürStrG → PFLICHT_ERMESSEN)
+    "541000": ("E", "Gemeindestraßen allgemein, ThürStrG"),
+    "541010": ("E", "Gemeindestraßen, ThürStrG"),
+    "541020": ("E", "Gemeindestraßen, ThürStrG"),
+    "541030": ("E", "Gemeindestraßen, ThürStrG"),
+    "541050": ("E", "Gemeindestraßen, ThürStrG"),
+    "541060": ("E", "Gemeindestraßen, ThürStrG"),
+    "541070": ("E", "Gemeindestraßen, ThürStrG"),
+    "551000": ("E", "Naturschutz/Landschaftspflege, ThürNatSchG"),
+    "553010": ("E", "Gewässerpflege, WHG, ThürWG"),
+    "553020": ("E", "Gewässerpflege, WHG, ThürWG"),
+
+    # TP11 Jugendarbeit (362xxx → PFLICHT_ERMESSEN)
+    "362000": ("E", "Jugendarbeit, SGB VIII § 11"),
+    "362010": ("E", "Jugendarbeit, SGB VIII § 11"),
+    "362020": ("E", "Jugendarbeit, SGB VIII § 11"),
+    "362030": ("E", "Jugendarbeit, SGB VIII § 11"),
+    "362040": ("E", "Jugendarbeit, SGB VIII § 11"),
+    "362080": ("E", "Jugendarbeit/Jugendsozialarbeit, SGB VIII §§ 11 f."),
+    "362090": ("E", "Jugendarbeit, SGB VIII § 11"),
+
+    # TP12
+    "271000": ("E", "Volkshochschule/Bildungseinrichtungen, ThürEBG"),
+
+    # TP10 Schulen
+    "212000": ("E", "Gemeinschafts-/Berufsschulen Schulträger, ThürSchulG"),
+    "212010": ("E", "Schulen Schulträger, ThürSchulG"),
+    "212020": ("E", "Schulen Schulträger, ThürSchulG"),
+    "217010": ("E", "Gymnasien Schulträger, ThürSchulG"),
+    "217020": ("E", "Gymnasien Schulträger, ThürSchulG"),
+    "231000": ("E", "Schülerbeförderung, ThürSchulG § 69"),
+    "241000": ("E", "Sonstige Schulaufgaben/Schulsozialarbeit, ThürSchulG"),
+    "243000": ("E", "Sonstige schulische Aufgaben, ThürSchulG"),
+    "243010": ("E", "Sonstige schulische Aufgaben, ThürSchulG"),
+    "243020": ("E", "Sonstige schulische Aufgaben, ThürSchulG"),
+
+    # TP04 Finanzverwaltung
+    "116000": ("E", "Finanzmanagement/Rechnungsprüfung, ThürGemHV-Doppik"),
+
+    # TP03
+    "113000": ("E", "IT/Informations-Kommunikationstechnologie, OZG"),
+
+    # TP08
+    "552000": ("E", "Gewässerpflege, WHG, ThürWG"),
+    "561000": ("E", "Stadtgrün/Grünanlagen, freiwillig"),
+
+    # TP02 Sportanlagen
+    "281000": ("E", "Schulsportanlagen Bereitstellung, ThürSchulG"),
+    "281010": ("E", "Schulsportanlagen, ThürSchulG"),
+    "281020": ("F", "Vereinssportförderung, freiwillig"),
+    "281030": ("F", "Sport/Freizeitanlagen, freiwillig"),
+
+    # TP11 HzE
+    "363000": ("S", "Hilfen zur Erziehung allgemein, SGB VIII § 27 ff."),
+}
+
+
 def main():
     conn = sqlite3.connect("suhl_haushalt_2025.db")
     cur = conn.cursor()
 
     updates = 0
     skipped = []
-    for pnr, (sk_typ, grund) in KATEGORIEN.items():
+    alle = {**KATEGORIEN, **KATEGORIEN_PASS2, **KATEGORIEN_PASS3}
+    for pnr, (sk_typ, grund) in alle.items():
         sk_id = SK[sk_typ]
         cur.execute(
             "UPDATE produkte SET steuerungs_kategorie_id=?, rechtsgrundlage=? "
