@@ -275,6 +275,8 @@ function init() {
   setupTabs();
   document.getElementById("toggle-gestaltbar").addEventListener("change", renderTreemap);
   document.getElementById("generiert-am").textContent = "Stand: " + new Date(DATA.meta.generiert_am).toLocaleDateString("de-DE");
+  const defaultEq = DATA.ertragsquellen.find(e => e.gruppe.toLowerCase().includes("schlüssel")) || DATA.ertragsquellen[0];
+  if (defaultEq) showMittelflussDetail(defaultEq);
 }
 
 // ── KPI ───────────────────────────────────────────────────────────────────
@@ -353,11 +355,9 @@ function renderSankey() {
   sankeyEl.removeAllListeners && sankeyEl.removeAllListeners("plotly_click");
   sankeyEl.on("plotly_click", function(eventData) {
     const pt = eventData.points[0];
-    if (!pt || pt.source !== undefined) return; // link click, nicht Knoten
-    const nodeIdx = pt.index !== undefined ? pt.index : pt.pointIndex;
-    if (nodeIdx !== undefined && nodeIdx < DATA.ertragsquellen.length) {
-      showMittelflussDetail(DATA.ertragsquellen[nodeIdx]);
-    }
+    if (!pt) return;
+    const found = DATA.ertragsquellen.find(e => e.gruppe === pt.label);
+    if (found) showMittelflussDetail(found);
   });
 }
 
@@ -843,7 +843,8 @@ function showMittelflussDetail(eq) {
 
   html += `</div>
   <div class="mt-3 pt-2 border-t border-slate-700 text-xs text-slate-500">
-    Proportional zu den Aufwendungsanteilen der Teilpläne
+    Proportional zu den Aufwendungsanteilen der Teilpläne ·
+    <span class="text-sky-600 cursor-pointer">Im Sankey links auf eine andere Ertragsquelle klicken zum Wechseln</span>
   </div>`;
 
   document.getElementById("mf-placeholder").classList.add("hidden");
