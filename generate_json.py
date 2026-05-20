@@ -471,6 +471,100 @@ def make_details_tp(con):
     return result
 
 
+def make_personal(con):
+    """
+    Exportiert Personalkosten-Daten für den Personal-Tab.
+    Kontengruppen:
+      bez_beamte  : 5021xxx  – Dienstbezüge Beamte
+      bez_tarif   : 5022xxx + 5023xxx + 5024xxx + 5029xxx – Dienstbezüge Tarif/Sonstige
+      vers_beamte : 5031xxx  – Versorgungskasse Beamte
+      vers_tarif  : 5032xxx + 5039xxx – Versorgungskasse Tarif
+      sv          : 5042xxx + 5043xxx + 5049xxx – Sozialversicherung
+      beihilfen   : 5051xxx + 5052xxx – Beihilfen & Unterstützungen
+      sonstiges   : 5062xxx + 5071xxx + 5013xxx + 5019xxx – Nebenkosten & Rückstellungen
+    """
+    YEARS = [2023, 2024, 2025]
+    WERT_TYP = "PLAN_ANSATZ"
+
+    def konto_gruppe(konto_nr):
+        p = konto_nr[:4]
+        if p == "5021":                           return "bez_beamte"
+        if p in ("5022","5023","5024","5029"):    return "bez_tarif"
+        if p == "5031":                           return "vers_beamte"
+        if p in ("5032","5039"):                  return "vers_tarif"
+        if p in ("5042","5043","5049"):           return "sv"
+        if p in ("5051","5052"):                  return "beihilfen"
+        if p in ("5062","5071","5013","5019"):    return "sonstiges"
+        return None
+
+    GRUPPEN_LABELS = {
+        "bez_beamte":  "Dienstbezüge Beamte",
+        "bez_tarif":   "Dienstbezüge Tarifbeschäftigte",
+        "vers_beamte": "Versorgungskasse Beamte",
+        "vers_tarif":  "Versorgungskasse Tarif",
+        "sv":          "Sozialversicherung",
+        "beihilfen":   "Beihilfen & Unterstützungen",
+        "sonstiges":   "Nebenkosten & Rückstellungen",
+    }
+
+    by_year = {}
+    for yr in YEARS:
+        rows = con.execute("""
+            SELECT t.nummer AS tp_nr, t.bezeichnung AS tp_name,
+                   k.konto_nummer, SUM(h.betrag) AS betrag
+            FROM haushaltswerte h
+            JOIN produkte p   ON h.produkt_id = p.id
+            JOIN teilplaene t ON p.teilplan_id = t.id
+            JOIN konten k     ON h.konto_id    = k.id
+            WHERE h.daten_jahr = ? AND h.wert_typ = ?
+              AND (k.konto_nummer LIKE '501%'
+                OR k.konto_nummer LIKE '502%'
+                OR k.konto_nummer LIKE '503%'
+                OR k.konto_nummer LIKE '504%'
+                OR k.konto_nummer LIKE '505%'
+                OR k.konto_nummer LIKE '506%'
+                OR k.konto_nummer LIKE '507%')
+            GROUP BY t.nummer, k.konto_nummer
+        """, (yr, WERT_TYP)).fetchall()
+
+        gesamt_gruppen = {g: 0.0 for g in GRUPPEN_LABELS}
+        nach_tp = {}
+
+        for r in rows:
+            gr = konto_gruppe(r["konto_nummer"])
+            if gr is None:
+                continue
+            tp = r["tp_nr"]
+            if tp not in nach_tp:
+                nach_tp[tp] = {
+                    "name": TP_NAMEN_SCHOEN.get(tp, r["tp_name"]),
+                    **{g: 0.0 for g in GRUPPEN_LABELS},
+                }
+            nach_tp[tp][gr]  = nach_tp[tp].get(gr, 0.0) + (r["betrag"] or 0.0)
+            gesamt_gruppen[gr] += (r["betrag"] or 0.0)
+
+        # Gesamtsummen und TP-Totals
+        for tp_data in nach_tp.values():
+            tp_data["gesamt"] = sum(tp_data[g] for g in GRUPPEN_LABELS)
+
+        gesamt = sum(gesamt_gruppen.values())
+
+        by_year[str(yr)] = {
+            "gesamt":       round(gesamt, 2),
+            **{g: round(v, 2) for g, v in gesamt_gruppen.items()},
+            "nach_tp": {
+                tp: {k: round(v, 2) if isinstance(v, float) else v
+                     for k, v in data.items()}
+                for tp, data in sorted(nach_tp.items())
+            },
+        }
+
+    return {
+        "gruppen_labels": GRUPPEN_LABELS,
+        "by_year":        by_year,
+    }
+
+
 def main():
     con = sqlite3.connect(DB_PATH)
     con.row_factory = sqlite3.Row
@@ -609,6 +703,9 @@ def main():
     # ── Details-Drill-Down (TP → Produkte → Konten) ──────────────────────────
     result["details_tp"] = make_details_tp(con)
 
+    # ── Personal-Tab ──────────────────────────────────────────────────────────
+    result["personal"] = make_personal(con)
+
     # ── Ausgabe ───────────────────────────────────────────────────────────────
     with open(OUT_PATH, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, separators=(",", ":"))
@@ -623,6 +720,7 @@ def main():
         ("Ertragsquellen",     len(result["ertragsquellen"])),
         ("Simulator-Produkte", len(sim)),
         ("Details-Produkte",   dtl_total),
+        ("Personal-Gruppen",   len(result["personal"]["gruppen_labels"])),
     ]:
         print(f"     {k+':':25s} {v}")
     for yr in [2023, 2024, 2025]:
