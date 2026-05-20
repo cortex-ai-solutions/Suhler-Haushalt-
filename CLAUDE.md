@@ -610,85 +610,45 @@ Phase 4:  Memory-Dateien in OpenClaw-Container ablegen
 
 ## Stellenplan-Pipeline — Stufe 2
 
-**Status:** Geplant. Stufe 1 (Personalkosten aus DB) ist live im Dashboard.
+**Status: ABGESCHLOSSEN (2026-05-20).** Stufe 1 (Personalkosten) und Stufe 2 (Stellenplan) sind live.
 
-### Was Stufe 1 bereits liefert (Personal-Tab)
+### Was umgesetzt wurde (Stand 2026-05-20)
 
-Der Personal-Tab im Dashboard zeigt Personalkosten aus der bestehenden DB:
-- Konten 501x–507x gruppiert in 7 Kategorien (Beamte/Tarif Bezüge, Versorgung, SV, Beihilfen, Sonstiges)
-- Je Teilplan und Jahr (2023–2025), ~34,8 Mio € Personalkosten 2025
+**Stufe 1 — Personalkosten-Tab (live):**
+- Konten 501x–507x gruppiert in 7 Kategorien je Teilplan und Jahr (2023–2025)
+- ~34,8 Mio € Personalkosten 2025; KPI-Chips, Donut, TP-Balken, Zeitreihe
 
-**Fehlende Daten:** Köpfe (Vollzeitstellen), Besoldungsgruppen (A1-B / E1-E15)
+**Stufe 2 — Stellenplan-Abschnitt (live):**
+- `pipeline_stellenplan.py`: extrahiert PDF-Seiten 893–898 (HH-Plan 2025)
+- DB-Tabellen: `besoldungsgruppen`, `stellenplan` (mit `wert_typ`: PLAN_ANSATZ/IST)
+- Daten: 2024 (Plan + Ist-30.06) und 2025 (Plan), Summen ✓ (Beamte 77,000 / Tarif 413,238)
+- Dashboard: KPI-Chips, 2 Plotly-Charts, pinnable Besoldungsgruppen-Tabelle, Merkzettel
+- Orsi-Skill: `budget_query.py` erweitert um `detect_stellenplan()`, `query_stellenplan()`, `format_stellenplan()`, `format_stellenplan_vergleich()`
 
-### Was Stufe 2 hinzufügt
-
-Aus dem Stellenplan-PDF (je ca. 30–50 Seiten im Haushaltsplan) extrahieren:
-- **Planstellen je Besoldungsgruppe:** A6–A16, B2–B8 (Beamte), E1–E15, SuE (Tarif)
-- **Planstellenanzahl 2023/2024/2025** (Soll-Stellen, genehmigt)
-- **Teilplan-Zuordnung** der Stellen
-
-### Datenbankschema Stufe 2 (neue Tabellen)
+### Datenbankschema (implementiert)
 
 ```sql
--- Stellenplan-Dimensionen
 besoldungsgruppen (id, kuerzel, typ, beschreibung)
-  -- typ: BEAMTE | TARIF
-  -- kuerzel: 'A6', 'A7', ..., 'E1', 'E2', ..., 'SuE'
+  -- typ: BEAMTE | TARIF; kuerzel: 'A7', 'A8', ..., 'E9a', 'S14', ...
 
-stellenplan (id, teilplan_id, besoldungsgruppe_id, daten_jahr, planstellen)
-  -- planstellen: DECIMAL(5,2) — ganze und halbe Stellen
+stellenplan (id, teilplan_id, besoldungsgruppe_id, daten_jahr, wert_typ, planstellen)
+  -- wert_typ: PLAN_ANSATZ | IST
+  -- planstellen: REAL (z.B. 0.5, 1.0, 86.434)
+  -- UNIQUE(teilplan_id, besoldungsgruppe_id, daten_jahr, wert_typ)
 ```
 
-### Pipeline Stufe 2
+### Noch offener Punkt
 
-```
-Dateien:
-  smart_split_stellenplan.py    ← PDF-Chunks aus Stellenplan-Abschnitt
-  pipeline_stellenplan.py       ← OCR/Regex-Extraktion → DB
-  validate_stellenplan.py       ← Prüfung gegen Summen im PDF-Stellenplan
+**2023-Daten fehlen:** Erfordert vollständiges HH-Plan 2024 PDF unter `knowledge/`.
+Sobald vorhanden: `python pipeline_stellenplan.py` mit angepasstem `PDF_PATH` für 2024-PDF,
+dann `python generate_json.py` → automatisch neue Jahresspalte in Dashboard + Skill.
 
-Aufruf:
-  python smart_split_stellenplan.py  # Stellenplan-PDF aufteilen
-  python pipeline_stellenplan.py     # Stellen in DB importieren
-  python generate_json.py            # JSON neu generieren (personal.by_year erhält stellenplan-Schlüssel)
-```
+### Jahrgänge (Überblick)
 
-### Herausforderungen
-
-1. **Tabellenstruktur variiert** je Jahrgang (2022 vs. 2025 unterschiedliche Spaltenbreiten)
-2. **Mehrseitige Tabellen** — Seitenumbrüche zerschneiden Zeilen
-3. **Halbe Stellen** — PDF zeigt "0,5" (Komma, nicht Punkt)
-4. **Querverweise** — Stellenplan verweist auf Fußnoten für kw-Stellen (künftig wegfallend)
-
-### Erwartetes Ergebnis im JSON (`personal.by_year["2025"]`)
-
-```json
-{
-  "gesamt": 34780000,
-  "bez_beamte": 4360000,
-  ...
-  "stellenplan": {
-    "gesamt_stellen": 412.5,
-    "beamte_stellen": 78.0,
-    "tarif_stellen": 334.5,
-    "nach_gruppe": {
-      "A6": 12, "A7": 8, "A8": 14, "A9": 11,
-      "E6": 45, "E8": 62, "E9a": 38, ...
-    },
-    "nach_tp": {
-      "03": { "gesamt": 89.5, "beamte": 22, "tarif": 67.5 },
-      ...
-    }
-  }
-}
-```
-
-### Jahrgänge für Stufe 2
-
-Folgende Haushaltspläne haben Stellenpläne und können mit der Pipeline verarbeitet werden:
-- 2022 (online verfügbar, ca. 1.100 Seiten)
-- 2023 (bereits für ETL genutzt — Stellenplan noch nicht extrahiert)
-- 2024 (bereits für ETL genutzt — Stellenplan noch nicht extrahiert)
-- 2025 (bereits für ETL genutzt — Stellenplan noch nicht extrahiert)
-
-**Hinweis:** PDFs liegen lokal unter `knowledge/` (nicht im Repo).
+| Jahrgang | Stellenplan-Daten | Status |
+|----------|------------------|--------|
+| 2025 Plan | ✅ | in DB |
+| 2024 Plan (Soll) | ✅ | in DB |
+| 2024 Ist (30.06) | ✅ | in DB |
+| 2023 | ❌ | PDF fehlt (HH-Plan 2024 nötig) |
+| 2022 | ❌ | PDF fehlt |
