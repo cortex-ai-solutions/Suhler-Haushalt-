@@ -293,6 +293,30 @@
       </div>
     </div>
 
+    <!-- Stellenplan-Tabelle (pinnable) -->
+    <div class="card p-5 mb-6">
+      <div class="flex items-center justify-between mb-3">
+        <div class="section-title">Stellen je Besoldungs-/Entgeltgruppe</div>
+        <button onclick="clearSpPins()" class="text-xs text-slate-500 hover:text-slate-300 transition">
+          Alle Pins entfernen
+        </button>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="lg:col-span-2 overflow-x-auto">
+          <table class="w-full text-sm" id="sp-gruppe-table">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div id="sp-merkzettel-card" class="card bg-slate-800/60 p-4 hidden">
+          <div class="section-title text-sm mb-3">
+            📌 Gepinnte Gruppen
+          </div>
+          <div id="sp-merkzettel-body"></div>
+        </div>
+      </div>
+    </div>
+
   </div>
 
 </div>
@@ -1124,8 +1148,9 @@ function renderPersonal() {
     type: "bar", orientation: "h",
     x: allKeys.map(k => ng[k].planstellen),
     y: allKeys,
+    customdata: allKeys.map(k => fmt(ng[k].planstellen, 3)),
     marker: { color: beamteColors },
-    hovertemplate: "<b>%{y}</b>: %{x:.3f} Stellen<extra></extra>",
+    hovertemplate: "<b>%{y}</b>: %{customdata} Stellen<extra></extra>",
   }], {
     paper_bgcolor: "transparent", plot_bgcolor: "transparent",
     font: { color: "#94a3b8", size: 11 },
@@ -1145,13 +1170,15 @@ function renderPersonal() {
     type:"bar", name:"2024 (Soll)", x:tpLabels,
     y: tpNrs.map(tp => (sp24.nach_tp[tp] || {}).gesamt || 0),
     marker:{color:"#60a5fa"}, opacity:0.7,
-    hovertemplate:"<b>%{x}</b> 2024: %{y:.3f} Stellen<extra></extra>",
+    customdata: tpNrs.map(tp => fmt((sp24.nach_tp[tp] || {}).gesamt || 0, 3)),
+    hovertemplate:"<b>%{x}</b> 2024: %{customdata} Stellen<extra></extra>",
   });
   if (sp25) spTpTraces.push({
     type:"bar", name:"2025 (Plan)", x:tpLabels,
     y: tpNrs.map(tp => (sp25.nach_tp[tp] || {}).gesamt || 0),
     marker:{color:"#818cf8"},
-    hovertemplate:"<b>%{x}</b> 2025: %{y:.3f} Stellen<extra></extra>",
+    customdata: tpNrs.map(tp => fmt((sp25.nach_tp[tp] || {}).gesamt || 0, 3)),
+    hovertemplate:"<b>%{x}</b> 2025: %{customdata} Stellen<extra></extra>",
   });
   Plotly.newPlot("chart-sp-tp", spTpTraces, {
     barmode: "group",
@@ -1162,6 +1189,129 @@ function renderPersonal() {
     legend:{font:{size:10,color:"#94a3b8"},orientation:"h",y:-0.18},
     margin:{l:10,r:10,t:10,b:70},
   }, { responsive:true, displayModeBar:false });
+
+  renderSpGruppeTable(sp, SP);
+}
+
+// ── Stellenplan-Merkzettel ─────────────────────────────────────────────────
+let spPins = new Set(JSON.parse(localStorage.getItem("sp_pins") || "[]"));
+
+function saveSpPins() {
+  localStorage.setItem("sp_pins", JSON.stringify([...spPins]));
+}
+
+function clearSpPins() {
+  spPins.clear(); saveSpPins();
+  const SP = DATA.personal && DATA.personal.stellenplan;
+  const yr = String(activeJahr);
+  const spKey = yr + "_PLAN_ANSATZ";
+  const sp = SP && (SP.by_year[spKey] || SP.by_year["2025_PLAN_ANSATZ"]);
+  if (sp) renderSpGruppeTable(sp, SP);
+}
+
+function toggleSpPin(kuerzel) {
+  if (spPins.has(kuerzel)) spPins.delete(kuerzel); else spPins.add(kuerzel);
+  saveSpPins();
+  const SP = DATA.personal && DATA.personal.stellenplan;
+  const yr = String(activeJahr);
+  const spKey = yr + "_PLAN_ANSATZ";
+  const sp = SP && (SP.by_year[spKey] || SP.by_year["2025_PLAN_ANSATZ"]);
+  if (sp) renderSpGruppeTable(sp, SP);
+}
+
+function renderSpGruppeTable(sp, SP) {
+  const ng = sp.nach_gruppe || {};
+  const years = Object.keys(SP.by_year)
+    .filter(k => k.endsWith("_PLAN_ANSATZ"))
+    .sort();
+  // Jahres-Labels (z.B. "2024", "2025")
+  const yrLabels = years.map(k => k.replace("_PLAN_ANSATZ",""));
+
+  const thead = document.querySelector("#sp-gruppe-table thead");
+  const tbody = document.querySelector("#sp-gruppe-table tbody");
+  if (!thead || !tbody) return;
+
+  // Kopfzeile
+  thead.innerHTML = `<tr class="text-left text-slate-400 text-xs border-b border-slate-700">
+    <th class="py-2 pr-3 font-medium">Gruppe</th>
+    <th class="py-2 pr-3 font-medium">Typ</th>
+    ${yrLabels.map(y => `<th class="py-2 pr-3 font-medium text-right">${y}</th>`).join("")}
+    ${yrLabels.length > 1 ? `<th class="py-2 pr-3 font-medium text-right">Δ</th>` : ""}
+    <th class="py-2 font-medium text-center w-8">📌</th>
+  </tr>`;
+
+  // Alle Gruppen, Beamte zuerst, dann Tarif; je Typ nach Planstellen desc
+  const sorted = Object.keys(ng).sort((a, b) => {
+    if (ng[a].typ !== ng[b].typ) return ng[a].typ === "BEAMTE" ? -1 : 1;
+    return ng[b].planstellen - ng[a].planstellen;
+  });
+
+  const rows = sorted.map(kg => {
+    const pinned = spPins.has(kg);
+    const typColor = ng[kg].typ === "BEAMTE" ? "text-blue-300" : "text-emerald-300";
+    const typLabel = ng[kg].typ === "BEAMTE" ? "Beamte" : "Tarif";
+    const vals = yrLabels.map(y => {
+      const ysp = SP.by_year[y + "_PLAN_ANSATZ"] || {};
+      return (ysp.nach_gruppe || {})[kg]?.planstellen ?? null;
+    });
+    const valCells = vals.map(v =>`<td class="py-1.5 pr-3 text-right">${v !== null ? fmt(v,3) : "–"}</td>`).join("");
+    let deltaTd = "";
+    if (yrLabels.length > 1) {
+      const first = vals[0], last = vals[vals.length-1];
+      if (first !== null && last !== null) {
+        const d = last - first;
+        const sign = d >= 0 ? "+" : "";
+        const col = d > 0 ? "text-emerald-400" : d < 0 ? "text-rose-400" : "text-slate-400";
+        deltaTd = `<td class="py-1.5 pr-3 text-right ${col}">${sign}${fmt(d,3)}</td>`;
+      } else {
+        deltaTd = `<td class="py-1.5 pr-3 text-right text-slate-500">–</td>`;
+      }
+    }
+    return `<tr class="border-b border-slate-800 hover:bg-slate-800/40 ${pinned ? "bg-blue-950/30" : ""}">
+      <td class="py-1.5 pr-3 font-mono font-medium text-slate-200">${kg}</td>
+      <td class="py-1.5 pr-3"><span class="text-xs ${typColor}">${typLabel}</span></td>
+      ${valCells}${deltaTd}
+      <td class="py-1.5 text-center cursor-pointer select-none" onclick="toggleSpPin('${kg}')"
+          title="${pinned ? 'Pin entfernen' : 'Pinnen'}">${pinned ? "📌" : '<span class="text-slate-600 hover:text-slate-400">📌</span>'}</td>
+    </tr>`;
+  });
+  tbody.innerHTML = rows.join("");
+
+  // Merkzettel-Kachel
+  const mc = document.getElementById("sp-merkzettel-card");
+  const mb = document.getElementById("sp-merkzettel-body");
+  if (!mc || !mb) return;
+  if (spPins.size === 0) { mc.classList.add("hidden"); return; }
+  mc.classList.remove("hidden");
+
+  let mhtml = `<table class="w-full text-xs mb-2">
+    <thead><tr class="text-slate-400 border-b border-slate-700">
+      <th class="text-left py-1 pr-2">Gruppe</th>
+      ${yrLabels.map(y => `<th class="text-right py-1 pr-2">${y}</th>`).join("")}
+      ${yrLabels.length > 1 ? `<th class="text-right py-1">Δ</th>` : ""}
+    </tr></thead><tbody>`;
+  [...spPins].forEach(kg => {
+    if (!ng[kg]) return;
+    const vals = yrLabels.map(y => {
+      const ysp = SP.by_year[y + "_PLAN_ANSATZ"] || {};
+      return (ysp.nach_gruppe || {})[kg]?.planstellen ?? null;
+    });
+    const valCells = vals.map(v => `<td class="py-1 pr-2 text-right text-slate-200">${v !== null ? fmt(v,3) : "–"}</td>`).join("");
+    let dTd = "";
+    if (yrLabels.length > 1) {
+      const d = (vals[vals.length-1] ?? 0) - (vals[0] ?? 0);
+      const sign = d >= 0 ? "+" : "";
+      const col = d > 0 ? "text-emerald-400" : d < 0 ? "text-rose-400" : "text-slate-400";
+      dTd = `<td class="py-1 text-right ${col}">${sign}${fmt(d,3)}</td>`;
+    }
+    mhtml += `<tr class="border-b border-slate-800">
+      <td class="py-1 pr-2 font-mono font-medium text-slate-300">${kg}
+        <button class="ml-1 text-slate-600 hover:text-slate-300" onclick="toggleSpPin('${kg}')">✕</button></td>
+      ${valCells}${dTd}`,
+    </tr>`;
+  });
+  mhtml += "</tbody></table>";
+  mb.innerHTML = mhtml;
 }
 function setupTabs() {
   const TABS = ["overview", "details", "personal", "jahresvergleich", "zeitreihe", "simulator"];
