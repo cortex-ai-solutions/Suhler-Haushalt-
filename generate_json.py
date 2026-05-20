@@ -419,6 +419,58 @@ def make_ertragsquellen(con, jahr):
     ]
 
 
+def make_details_tp(con):
+    """Pro TP → Produkte → Konten (KK4+5, PLAN_ANSATZ, 2023/24/25)."""
+    result = {}
+    for tp in con.execute("SELECT id, nummer FROM teilplaene ORDER BY nummer"):
+        tid, tp_nr = tp["id"], tp["nummer"]
+        produkte = []
+        for p in con.execute("""
+            SELECT p.id, p.produkt_nummer, p.bezeichnung, sk.code AS sk_code
+            FROM produkte p
+            LEFT JOIN steuerungs_kategorien sk ON p.steuerungs_kategorie_id = sk.id
+            WHERE p.teilplan_id = ?
+            ORDER BY p.produkt_nummer
+        """, (tid,)):
+            pid, pnr = p["id"], p["produkt_nummer"]
+            konten_by_nr = {}
+            for k in con.execute("""
+                SELECT k.konto_nummer, k.bezeichnung, kk.nummer AS kk_nr,
+                       h.daten_jahr, SUM(h.betrag) AS betrag
+                FROM haushaltswerte h
+                JOIN konten k ON h.konto_id = k.id
+                JOIN kontenklassen kk ON k.kontenklasse_id = kk.id
+                WHERE h.produkt_id = ? AND h.daten_jahr IN (2023, 2024, 2025)
+                  AND h.wert_typ = 'PLAN_ANSATZ' AND kk.nummer IN (4, 5)
+                GROUP BY k.konto_nummer, h.daten_jahr
+                ORDER BY kk.nummer, k.konto_nummer
+            """, (pid,)):
+                knr = k["konto_nummer"]
+                yr_key = f"b{str(k['daten_jahr'])[2:]}"
+                if knr not in konten_by_nr:
+                    konten_by_nr[knr] = {
+                        "knr": knr, "bez": k["bezeichnung"],
+                        "kk": k["kk_nr"],
+                        "b23": 0.0, "b24": 0.0, "b25": 0.0,
+                    }
+                konten_by_nr[knr][yr_key] = round(k["betrag"], 2)
+            konten = [v for v in konten_by_nr.values()
+                      if v["b23"] or v["b24"] or v["b25"]]
+            if not konten:
+                continue
+            produkte.append({
+                "pnr":    pnr,
+                "name":   PRODUKT_NAMEN.get(pnr, p["bezeichnung"]),
+                "sk":     p["sk_code"] or "unbekannt",
+                "konten": konten,
+            })
+        result[tp_nr] = {
+            "tp_name":  TP_NAMEN_SCHOEN.get(tp_nr, tp_nr),
+            "produkte": produkte,
+        }
+    return result
+
+
 def main():
     con = sqlite3.connect(DB_PATH)
     con.row_factory = sqlite3.Row
@@ -554,18 +606,23 @@ def main():
         }
     ]
 
+    # ── Details-Drill-Down (TP → Produkte → Konten) ──────────────────────────
+    result["details_tp"] = make_details_tp(con)
+
     # ── Ausgabe ───────────────────────────────────────────────────────────────
     with open(OUT_PATH, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, separators=(",", ":"))
 
     size_kb = os.path.getsize(OUT_PATH) // 1024
     print(f"[OK] {OUT_PATH}  ({size_kb} KB)")
+    dtl_total = sum(len(tp["produkte"]) for tp in result["details_tp"].values())
     for k, v in [
         ("Zeitreihe",          len(result["zeitreihe"])),
         ("Teilplaene 2025",    len(by_year["2025"]["teilplaene"])),
         ("Teilplaene 2024",    len(by_year["2024"]["teilplaene"])),
         ("Ertragsquellen",     len(result["ertragsquellen"])),
         ("Simulator-Produkte", len(sim)),
+        ("Details-Produkte",   dtl_total),
     ]:
         print(f"     {k+':':25s} {v}")
     for yr in [2023, 2024, 2025]:

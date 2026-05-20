@@ -97,6 +97,7 @@
 <!-- ─── TABS ──────────────────────────────────────────────────────────── -->
 <div class="tabbar" id="tabbar">
   <div class="tab active" data-tab="overview">Überblick</div>
+  <div class="tab" data-tab="details">Details</div>
   <div class="tab" data-tab="jahresvergleich">Jahresvergleich</div>
   <div class="tab" data-tab="zeitreihe">Zeitreihe</div>
   <div class="tab" data-tab="simulator">Konsolidierungs-Simulator</div>
@@ -140,6 +141,40 @@
     <div class="section-title">Saldo (Erträge − Aufwendungen) je Teilplan <span id="bar-tp-jahr">2025</span></div>
     <div id="chart-bar-tp" class="plotly-chart" style="min-height:320px;"></div>
   </div>
+</div>
+
+<!-- ══════════ TAB: DETAILS ══════════ -->
+<div id="tab-details" class="hidden">
+
+  <!-- TP-Auswahl -->
+  <div class="card p-4 mb-4">
+    <div class="flex flex-wrap gap-1.5" id="det-tp-btns"></div>
+  </div>
+
+  <!-- Suche + Kopfzeile -->
+  <div class="flex flex-wrap items-center gap-3 mb-3">
+    <div class="flex-1 min-w-0">
+      <div class="section-title mb-0" id="det-tp-name"></div>
+    </div>
+    <input type="text" id="det-search"
+      placeholder="Produkt oder Konto suchen …"
+      class="bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-400 w-full md:w-80"
+      oninput="renderDetailProdukte()">
+    <span class="text-xs text-slate-500 shrink-0" id="det-match-count"></span>
+  </div>
+
+  <!-- Spaltenheader (Desktop) -->
+  <div class="hidden md:grid px-3 pb-1.5 mb-1 text-xs text-slate-500 uppercase tracking-wider border-b border-slate-700" style="grid-template-columns:100px 1fr 90px 110px 110px 110px 20px;gap:0.5rem;">
+    <span>Nr.</span><span>Bezeichnung</span><span>Typ</span>
+    <span class="text-right">Erträge</span>
+    <span class="text-right">Aufw.</span>
+    <span class="text-right">Saldo</span>
+    <span></span>
+  </div>
+
+  <!-- Produkt-Liste -->
+  <div class="card" id="det-produkte-list"></div>
+
 </div>
 
 <!-- ══════════ TAB: JAHRESVERGLEICH ══════════ -->
@@ -349,6 +384,7 @@ function switchYear(jahr) {
   renderTreemap();
   renderBarTP();
   buildMfSelector();
+  if (DATA.details_tp) renderDetailProdukte();
   const defaultEq = getYD().ertragsquellen.find(e => e.gruppe.toLowerCase().includes("schlüssel")) || getYD().ertragsquellen[0];
   if (defaultEq) showMittelflussDetail(defaultEq);
 }
@@ -371,6 +407,7 @@ function init() {
   renderBarTP();
   renderZeitreihe();
   initSimulator();
+  initDetails();
   setupTabs();
   document.getElementById("toggle-gestaltbar").addEventListener("change", renderTreemap);
   document.getElementById("generiert-am").textContent = "Stand: " + new Date(DATA.meta.generiert_am).toLocaleDateString("de-DE");
@@ -826,7 +863,7 @@ function resetSimulator() {
 
 // ── TABS ──────────────────────────────────────────────────────────────────
 function setupTabs() {
-  const TABS = ["overview", "jahresvergleich", "zeitreihe", "simulator"];
+  const TABS = ["overview", "details", "jahresvergleich", "zeitreihe", "simulator"];
   document.querySelectorAll("#tabbar .tab").forEach(tab => {
     tab.addEventListener("click", () => {
       document.querySelectorAll("#tabbar .tab").forEach(t => t.classList.remove("active"));
@@ -834,6 +871,7 @@ function setupTabs() {
       const name = tab.dataset.tab;
       TABS.forEach(t => document.getElementById("tab-" + t).classList.toggle("hidden", name !== t));
       if (name === "zeitreihe") renderZeitreihe();
+      if (name === "details") renderDetailProdukte();
       if (name === "jahresvergleich") {
         if (!jvInit) { initJahresvergleich(); jvInit = true; } else renderJahresvergleich();
       }
@@ -1277,6 +1315,152 @@ function showJVDrilldown(tpNr) {
 function toggleJVDetail(pnr) {
   const el = document.getElementById("jvrg-" + pnr);
   if (el) el.classList.toggle("hidden");
+}
+
+// ── DETAILS TAB ──────────────────────────────────────────────────────────────
+let activeDtTP = "01";
+let dtExpanded = new Set();
+
+function initDetails() {
+  if (!DATA.details_tp) return;
+  const tps = Object.keys(DATA.details_tp).sort();
+  const container = document.getElementById("det-tp-btns");
+  tps.forEach(nr => {
+    const tp = DATA.details_tp[nr];
+    const btn = document.createElement("button");
+    btn.id = "det-tp-" + nr;
+    btn.textContent = "TP" + nr + " · " + tp.tp_name;
+    btn.className = "det-tp-pill text-xs px-3 py-1.5 rounded-full border border-slate-600 text-slate-400 hover:border-blue-400 hover:text-slate-200 transition-colors whitespace-nowrap";
+    btn.onclick = () => selectDtTP(nr);
+    container.appendChild(btn);
+  });
+  activeDtTP = tps[0];
+  selectDtTP(activeDtTP);
+}
+
+function selectDtTP(nr) {
+  activeDtTP = nr;
+  dtExpanded.clear();
+  const searchEl = document.getElementById("det-search");
+  if (searchEl) searchEl.value = "";
+  document.querySelectorAll(".det-tp-pill").forEach(b => {
+    const active = b.id === "det-tp-" + nr;
+    b.classList.toggle("border-blue-400", active);
+    b.classList.toggle("text-slate-200", active);
+    b.classList.toggle("bg-blue-950",    active);
+    b.classList.toggle("border-slate-600", !active);
+    b.classList.toggle("text-slate-400",   !active);
+  });
+  renderDetailProdukte();
+}
+
+function renderDetailProdukte() {
+  if (!DATA.details_tp) return;
+  const tp = DATA.details_tp[activeDtTP];
+  if (!tp) return;
+  const search  = ((document.getElementById("det-search") || {}).value || "").trim().toLowerCase();
+  const yrKey   = "b" + String(activeJahr).slice(2);
+  const SK_LBL  = {FREIWILLIG:"freiwillig",PFLICHT_ERMESSEN:"Ermessen",PFLICHT_STRIKT:"Striktpflicht",UEBERTRAGEN:"übertragen"};
+
+  document.getElementById("det-tp-name").textContent =
+    "TP" + activeDtTP + " – " + tp.tp_name + " · Haushaltsjahr " + activeJahr;
+
+  let produkte = tp.produkte;
+  const searching = search.length > 0;
+  if (searching) {
+    produkte = produkte.filter(p =>
+      p.pnr.includes(search) || p.name.toLowerCase().includes(search) ||
+      p.konten.some(k => k.knr.includes(search) || k.bez.toLowerCase().includes(search))
+    );
+  }
+
+  document.getElementById("det-match-count").textContent =
+    searching ? produkte.length + " von " + tp.produkte.length + " Produkten"
+              : tp.produkte.length + " Produkte";
+
+  function hl(text, q) {
+    if (!q) return escHtml(text);
+    const i = text.toLowerCase().indexOf(q);
+    if (i < 0) return escHtml(text);
+    return escHtml(text.slice(0,i)) +
+      "<mark class='bg-yellow-600/70 text-yellow-100 rounded-sm'>" + escHtml(text.slice(i, i+q.length)) + "</mark>" +
+      escHtml(text.slice(i + q.length));
+  }
+
+  const el = document.getElementById("det-produkte-list");
+  if (produkte.length === 0) {
+    el.innerHTML = "<div class='p-6 text-center text-slate-500 text-sm'>Keine Treffer für „" + escHtml(search) + "“</div>";
+    return;
+  }
+
+  el.innerHTML = "";
+  produkte.forEach(p => {
+    const kk4   = p.konten.filter(k => k.kk === 4).reduce((s,k) => s+(k[yrKey]||0), 0);
+    const kk5   = p.konten.filter(k => k.kk === 5).reduce((s,k) => s+(k[yrKey]||0), 0);
+    const saldo  = kk4 - kk5;
+    const expanded = searching || dtExpanded.has(p.pnr);
+
+    let visKonten = p.konten;
+    if (searching) {
+      const prodHit = p.pnr.includes(search) || p.name.toLowerCase().includes(search);
+      if (!prodHit) visKonten = visKonten.filter(k => k.knr.includes(search) || k.bez.toLowerCase().includes(search));
+    } else {
+      visKonten = visKonten.filter(k => (k[yrKey]||0) !== 0);
+    }
+
+    const kontenHTML = visKonten.map(k => {
+      const val    = k[yrKey]||0;
+      const valStr = val
+        ? "<span class='" + (k.kk===4?"text-emerald-400":"text-rose-400") + "'>" + fmtEur(val) + "</span>"
+        : "<span class='text-slate-600'>–</span>";
+      return "<tr class='text-xs hover:bg-slate-700/20'>" +
+        "<td class='py-1 pr-3 font-mono text-slate-500 whitespace-nowrap'>" + hl(k.knr,search) + "</td>" +
+        "<td class='py-1 pr-4 text-slate-300 leading-tight'>" + hl(k.bez,search) + "</td>" +
+        "<td class='py-1 text-right font-mono whitespace-nowrap'>" + valStr + "</td>" +
+        "</tr>";
+    }).join("");
+
+    const row = document.createElement("div");
+    row.className = "px-3 border-b border-slate-700 last:border-0";
+
+    const clickAttr = searching ? "" : " onclick=\"toggleDtProduct('" + p.pnr + "')\"";
+    const chevron   = searching ? "" : "<span class='text-slate-500 text-xs shrink-0'>" + (dtExpanded.has(p.pnr) ? "▲" : "▼") + "</span>";
+    const cursorCls = searching ? "" : " cursor-pointer hover:bg-slate-700/20";
+    const saldoCls  = saldo < 0 ? "text-rose-400" : saldo > 0 ? "text-emerald-400" : "text-slate-500";
+    const saldoStr  = saldo ? (saldo > 0 ? "+" : "") + fmtEur(saldo) : "–";
+
+    row.innerHTML =
+      "<div class='flex items-center gap-2 py-2.5 rounded" + cursorCls + "'" + clickAttr + ">" +
+        "<span class='font-mono text-xs text-slate-500 shrink-0 w-24'>" + hl(p.pnr,search) + "</span>" +
+        "<span class='text-slate-200 text-sm flex-1 leading-tight min-w-0'>" + hl(p.name,search) + "</span>" +
+        "<span class='tag " + skTagClass(p.sk) + " shrink-0'>" + (SK_LBL[p.sk]||p.sk) + "</span>" +
+        "<div class='hidden md:flex gap-3 text-xs font-mono shrink-0'>" +
+          "<span class='text-emerald-400 w-24 text-right'>" + (kk4 ? fmtEur(kk4) : "–") + "</span>" +
+          "<span class='text-rose-400 w-24 text-right'>"    + (kk5 ? fmtEur(kk5) : "–") + "</span>" +
+          "<span class='" + saldoCls + " w-24 text-right'>" + saldoStr + "</span>" +
+        "</div>" +
+        chevron +
+      "</div>" +
+      (expanded && kontenHTML
+        ? "<div class='pl-24 pr-2 pb-3'>" +
+            "<table class='w-full'>" +
+              "<thead><tr class='text-xs text-slate-500 border-b border-slate-700'>" +
+                "<th class='text-left pb-1 pr-3 font-normal w-28'>Konto-Nr.</th>" +
+                "<th class='text-left pb-1 pr-4 font-normal'>Bezeichnung</th>" +
+                "<th class='text-right pb-1 font-normal whitespace-nowrap'>Betrag " + activeJahr + "</th>" +
+              "</tr></thead>" +
+              "<tbody>" + kontenHTML + "</tbody>" +
+            "</table>" +
+          "</div>"
+        : "");
+
+    el.appendChild(row);
+  });
+}
+
+function toggleDtProduct(pnr) {
+  if (dtExpanded.has(pnr)) dtExpanded.delete(pnr); else dtExpanded.add(pnr);
+  renderDetailProdukte();
 }
 </script>
 </body>
