@@ -175,6 +175,30 @@
   <!-- Produkt-Liste -->
   <div class="card" id="det-produkte-list"></div>
 
+  <!-- Merkzettel -->
+  <div class="card p-5 mt-6" id="det-merkzettel-card">
+    <div class="flex flex-wrap items-center gap-3 mb-4">
+      <div class="section-title mb-0">Merkzettel – Jahresentwicklung</div>
+      <div class="ml-auto flex gap-2 items-center">
+        <span class="text-xs text-slate-500">Manuell hinzufügen:</span>
+        <input id="mz-pnr-input" placeholder="Produkt-Nr." maxlength="8"
+          class="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs text-slate-200 w-28 focus:outline-none focus:border-blue-400 font-mono">
+        <input id="mz-knr-input" placeholder="Konto-Nr." maxlength="8"
+          class="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs text-slate-200 w-28 focus:outline-none focus:border-blue-400 font-mono">
+        <button onclick="addMzManual()"
+          class="text-xs px-3 py-1 bg-blue-900 hover:bg-blue-800 border border-blue-700 rounded text-blue-200">
+          + Hinzufügen
+        </button>
+      </div>
+    </div>
+    <div class="text-xs text-rose-400 mb-2 hidden" id="mz-error"></div>
+    <div id="det-mz-table">
+      <div class="text-slate-500 text-sm text-center py-6">
+        Klicke auf <span class="text-blue-400 font-mono">⊕</span> neben einem Konto im Teilplan oben, um es hier hinzuzufügen.
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <!-- ══════════ TAB: JAHRESVERGLEICH ══════════ -->
@@ -1362,6 +1386,7 @@ function toggleJVDetail(pnr) {
 // ── DETAILS TAB ──────────────────────────────────────────────────────────────
 let activeDtTP = "01";
 let dtExpanded = new Set();
+let merkzettel = [];
 
 function initDetails() {
   if (!DATA.details_tp) return;
@@ -1377,6 +1402,7 @@ function initDetails() {
     container.appendChild(btn);
   });
   activeDtTP = tps[0];
+  loadMerkzettel();
   selectDtTP(activeDtTP);
 }
 
@@ -1455,10 +1481,15 @@ function renderDetailProdukte() {
       const valStr = val
         ? "<span class='" + (k.kk===4?"text-emerald-400":"text-rose-400") + "'>" + fmtEur(val) + "</span>"
         : "<span class='text-slate-600'>–</span>";
+      const isMz = merkzettel.some(m => m.pnr === p.pnr && m.knr === k.knr);
       return "<tr class='text-xs hover:bg-slate-700/20'>" +
         "<td class='py-1 pr-3 font-mono text-slate-500 whitespace-nowrap'>" + hl(k.knr,search) + "</td>" +
         "<td class='py-1 pr-4 text-slate-300 leading-tight'>" + hl(k.bez,search) + "</td>" +
         "<td class='py-1 text-right font-mono whitespace-nowrap'>" + valStr + "</td>" +
+        "<td class='py-1 pl-2'><button onclick=\"toggleMzItem('" + p.pnr + "','" + k.knr + "')\" "
+          + "title='" + (isMz ? 'Vom Merkzettel entfernen' : 'Zum Merkzettel hinzuf\u00fcgen') + "' "
+          + "class='text-sm leading-none " + (isMz ? 'text-blue-400' : 'text-slate-600 hover:text-blue-400') + "'>"
+          + (isMz ? '\u229b' : '\u2295') + "</button></td>" +
         "</tr>";
     }).join("");
 
@@ -1490,6 +1521,7 @@ function renderDetailProdukte() {
                 "<th class='text-left pb-1 pr-3 font-normal w-28'>Konto-Nr.</th>" +
                 "<th class='text-left pb-1 pr-4 font-normal'>Bezeichnung</th>" +
                 "<th class='text-right pb-1 font-normal whitespace-nowrap'>Betrag " + activeJahr + "</th>" +
+                "<th class='w-6'></th>" +
               "</tr></thead>" +
               "<tbody>" + kontenHTML + "</tbody>" +
             "</table>" +
@@ -1503,6 +1535,138 @@ function renderDetailProdukte() {
 function toggleDtProduct(pnr) {
   if (dtExpanded.has(pnr)) dtExpanded.delete(pnr); else dtExpanded.add(pnr);
   renderDetailProdukte();
+}
+
+// ── MERKZETTEL ────────────────────────────────────────────────────────────────
+function loadMerkzettel() {
+  try { merkzettel = JSON.parse(localStorage.getItem("suhl_mz") || "[]"); } catch { merkzettel = []; }
+  renderMerkzettel();
+}
+function saveMerkzettel() {
+  localStorage.setItem("suhl_mz", JSON.stringify(merkzettel));
+}
+
+function getMzAvailYears() {
+  const sample = Object.values(DATA.details_tp || {})?.[0]?.produkte?.[0]?.konten?.[0];
+  if (!sample) return [2025];
+  return Object.keys(sample)
+    .filter(k => /^b\d{2}$/.test(k))
+    .map(k => 2000 + parseInt(k.slice(1)))
+    .sort();
+}
+
+function getMzKonto(pnr, knr) {
+  for (const [tpNr, tp] of Object.entries(DATA.details_tp || {})) {
+    const prod = tp.produkte.find(p => p.pnr === pnr);
+    if (prod) {
+      const konto = prod.konten.find(k => k.knr === knr);
+      if (konto) return { tpNr, tp_name: tp.tp_name, prod_name: prod.name, sk: prod.sk, konto };
+    }
+  }
+  return null;
+}
+
+function toggleMzItem(pnr, knr) {
+  const idx = merkzettel.findIndex(m => m.pnr === pnr && m.knr === knr);
+  if (idx >= 0) merkzettel.splice(idx, 1);
+  else merkzettel.push({ pnr, knr });
+  saveMerkzettel();
+  renderMerkzettel();
+  renderDetailProdukte(); // H-Button-Status aktualisieren
+}
+
+function addMzManual() {
+  const pnr = (document.getElementById("mz-pnr-input").value || "").trim();
+  const knr = (document.getElementById("mz-knr-input").value || "").trim();
+  const errEl = document.getElementById("mz-error");
+  errEl.classList.add("hidden");
+  if (!pnr || !knr) { errEl.textContent = "Bitte Produkt-Nr. und Konto-Nr. eingeben."; errEl.classList.remove("hidden"); return; }
+  if (merkzettel.some(m => m.pnr === pnr && m.knr === knr)) { errEl.textContent = "Eintrag bereits im Merkzettel."; errEl.classList.remove("hidden"); return; }
+  if (!getMzKonto(pnr, knr)) { errEl.textContent = `Produkt "${pnr}" / Konto "${knr}" nicht gefunden (nur Konten aus TP01–TP12 verfügbar).`; errEl.classList.remove("hidden"); return; }
+  merkzettel.push({ pnr, knr });
+  saveMerkzettel();
+  document.getElementById("mz-pnr-input").value = "";
+  document.getElementById("mz-knr-input").value = "";
+  renderMerkzettel();
+  renderDetailProdukte();
+}
+
+function removeMzItem(pnr, knr) {
+  merkzettel = merkzettel.filter(m => !(m.pnr === pnr && m.knr === knr));
+  saveMerkzettel();
+  renderMerkzettel();
+  renderDetailProdukte();
+}
+
+function clearMerkzettel() {
+  merkzettel = [];
+  saveMerkzettel();
+  renderMerkzettel();
+  renderDetailProdukte();
+}
+
+function renderMerkzettel() {
+  const el = document.getElementById("det-mz-table");
+  if (!el) return;
+
+  if (merkzettel.length === 0) {
+    el.innerHTML = "<div class='text-slate-500 text-sm text-center py-6'>Klicke auf <span class='text-blue-400 font-mono'>⊕</span> neben einem Konto im Teilplan oben, um es hier hinzuzufügen.</div>";
+    return;
+  }
+
+  const years = getMzAvailYears();
+
+  // Δ-Pfeil zwischen erstem und letztem verfügbarem Jahr
+  const yrFirst = years[0], yrLast = years[years.length - 1];
+  const kFirst  = "b" + String(yrFirst).slice(2);
+  const kLast   = "b" + String(yrLast).slice(2);
+
+  let html = "<div class='flex justify-end mb-2'><button onclick='clearMerkzettel()' class='text-xs text-slate-500 hover:text-rose-400'>Alle entfernen</button></div>";
+  html += "<div class='overflow-x-auto'><table class='w-full text-xs'><thead><tr class='text-slate-500 border-b border-slate-700'>" +
+    "<th class='text-left pb-2 pr-2 font-normal whitespace-nowrap'>Produkt</th>" +
+    "<th class='text-left pb-2 pr-3 font-normal whitespace-nowrap'>Konto</th>";
+  years.forEach(yr => { html += `<th class='text-right pb-2 pr-2 font-normal whitespace-nowrap'>${yr}</th>`; });
+  html += "<th class='text-right pb-2 pr-2 font-normal whitespace-nowrap'>Δ " + yrFirst + "→" + yrLast + "</th>" +
+          "<th class='w-6'></th></tr></thead><tbody>";
+
+  merkzettel.forEach(({ pnr, knr }) => {
+    const info = getMzKonto(pnr, knr);
+    if (!info) return;
+    const { tp_name, prod_name, sk, konto } = info;
+    const skCls = skTagClass(sk);
+
+    const vals = years.map(yr => konto["b" + String(yr).slice(2)] || 0);
+    const vFirst = konto[kFirst] || 0, vLast = konto[kLast] || 0;
+    const delta  = vFirst > 0 ? vLast - vFirst : null;
+    const deltaPct = delta !== null && vFirst > 0 ? delta / vFirst * 100 : null;
+    const dc = delta > 0 ? "text-rose-400" : delta < 0 ? "text-emerald-400" : "text-slate-500";
+    const arrow = delta > 0 ? "↑" : delta < 0 ? "↓" : "→";
+
+    html += "<tr class='border-b border-slate-700/40 hover:bg-slate-700/10'>" +
+      "<td class='py-1.5 pr-2 align-top'>" +
+        "<div class='font-mono text-slate-500'>" + escHtml(pnr) + "</div>" +
+        "<div class='text-slate-300 leading-tight max-w-[180px] truncate' title='" + escHtml(prod_name) + "'>" + escHtml(prod_name) + "</div>" +
+      "</td>" +
+      "<td class='py-1.5 pr-3 align-top'>" +
+        "<div class='font-mono text-slate-500'>" + escHtml(knr) + "</div>" +
+        "<div class='text-slate-400 leading-tight max-w-[200px] truncate' title='" + escHtml(konto.bez) + "'>" + escHtml(konto.bez) + "</div>" +
+      "</td>";
+
+    vals.forEach(v => {
+      const cls = konto.kk === 4 ? "text-emerald-400" : "text-rose-400";
+      html += "<td class='py-1.5 pr-2 text-right font-mono align-top " + cls + "'>" + (v ? fmtEur(v) : "<span class='text-slate-600'>–</span>") + "</td>";
+    });
+
+    const dStr = delta !== null && delta !== 0
+      ? arrow + " " + (delta > 0 ? "+" : "") + fmtMio(delta) + (deltaPct !== null ? " (" + (deltaPct > 0 ? "+" : "") + fmt(deltaPct, 1) + "%)" : "")
+      : "–";
+    html += "<td class='py-1.5 pr-2 text-right font-mono align-top " + dc + " whitespace-nowrap'>" + dStr + "</td>" +
+      "<td class='py-1.5 align-top'><button onclick=\"removeMzItem('" + pnr + "','" + knr + "')\" class='text-slate-600 hover:text-rose-400 text-sm leading-none' title='Entfernen'>✕</button></td>" +
+      "</tr>";
+  });
+
+  html += "</tbody></table></div>";
+  el.innerHTML = html;
 }
 </script>
 </body>
