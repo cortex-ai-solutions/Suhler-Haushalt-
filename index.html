@@ -1243,9 +1243,50 @@ function renderJVTeilplaene() {
   });
 }
 
+function buildJVKontenHTML(pnr, tpNr) {
+  const dtProd = (DATA.details_tp?.[tpNr]?.produkte || []).find(p => p.pnr === pnr);
+  const konten  = (dtProd?.konten || []).filter(k => k.kk === 5);
+  if (!konten.length) return "";
+  const yrKey = yr => { const k = "b" + String(yr).slice(2); return ["b23","b24","b25"].includes(k) ? k : null; };
+  const kA = yrKey(jvBasis), kB = yrKey(jvVergl);
+  const sorted = [...konten].sort((a, b) => {
+    const dA = Math.abs((kB ? (a[kB]||0) : 0) - (kA ? (a[kA]||0) : 0));
+    const dB = Math.abs((kB ? (b[kB]||0) : 0) - (kA ? (b[kA]||0) : 0));
+    return dB - dA;
+  });
+  const krows = sorted.map(k => {
+    const vA = kA ? (k[kA] || 0) : null;
+    const vB = kB ? (k[kB] || 0) : null;
+    const kd   = (vA !== null && vB !== null) ? vB - vA : null;
+    const kpct = (kd !== null && vA > 0) ? kd / vA * 100 : null;
+    const dc   = kd > 0 ? "text-rose-400" : kd < 0 ? "text-emerald-400" : "text-slate-500";
+    return `<tr class="hover:bg-slate-700/30 text-xs">
+      <td class="py-0.5 pr-2 font-mono text-slate-500 whitespace-nowrap">${escHtml(k.knr)}</td>
+      <td class="py-0.5 pr-3 text-slate-400" colspan="2">${escHtml(k.bez)}</td>
+      <td class="py-0.5 text-right pr-2 font-mono text-slate-400">${vA ? fmtEur(vA) : "–"}</td>
+      <td class="py-0.5 text-right pr-2 font-mono text-slate-400">${vB ? fmtEur(vB) : "–"}</td>
+      <td class="py-0.5 text-right pr-2 font-mono ${dc}">${kd && kd !== 0 ? (kd > 0 ? "+" : "") + fmtMio(kd) : "–"}</td>
+      <td class="py-0.5 text-right font-mono ${dc}">${kpct !== null ? (kpct > 0 ? "+" : "") + fmt(kpct, 1) + "%" : "–"}</td>
+    </tr>`;
+  }).join("");
+  return `<div class="mt-2 border-t border-slate-700/40 pt-1">
+    <div class="text-slate-500 text-xs mb-1 uppercase tracking-wider">Konten (Aufwendungen KK5) · sortiert nach |Δ|</div>
+    <table class="w-full">
+      <thead><tr class="text-slate-500 text-xs border-b border-slate-700/40">
+        <th class="text-left py-0.5 pr-2 font-normal">Konto-Nr.</th>
+        <th class="text-left py-0.5 pr-3 font-normal" colspan="2">Bezeichnung</th>
+        <th class="text-right py-0.5 pr-2 font-normal">${jvBasis}</th>
+        <th class="text-right py-0.5 pr-2 font-normal">${jvVergl}</th>
+        <th class="text-right py-0.5 pr-2 font-normal">Δ abs.</th>
+        <th class="text-right py-0.5 font-normal">Δ %</th>
+      </tr></thead>
+      <tbody>${krows}</tbody>
+    </table>
+  </div>`;
+}
+
 function showJVDrilldown(tpNr) {
   jvAktivTP = tpNr;
-  // Sync select dropdown
   const sel = document.getElementById("jv-tp-select");
   if (sel) sel.value = tpNr;
 
@@ -1253,7 +1294,6 @@ function showJVDrilldown(tpNr) {
   const tpB = DATA.by_year[String(jvVergl)].teilplaene.find(t => t.tp_nr === tpNr);
   const tpName = (tpA || tpB)?.tp_name || "TP " + tpNr;
 
-  // Hinweis nur bei TP11 im 2024-Vergleich (Umgliederung Kita-Fördermittel)
   const warnEl = document.getElementById("jv-etl-warn");
   const showWarn = tpNr === "11" && (jvBasis === 2024 || jvVergl === 2024);
   warnEl.classList.toggle("hidden", !showWarn);
@@ -1275,7 +1315,7 @@ function showJVDrilldown(tpNr) {
   document.getElementById("jv-dd-subtitle").innerHTML =
     `${jvBasis}: ${fmtMio(totalA)} &nbsp;→&nbsp; ${jvVergl}: ${fmtMio(totalB)} &nbsp;|&nbsp; ` +
     `<span class="${totalD >= 0 ? "text-rose-400" : "text-emerald-400"}">${totalD >= 0 ? "+" : ""}${fmtMio(totalD)}</span> &nbsp;· ` +
-    `${rows.length} Produkte · sortiert nach |Δ|`;
+    `${rows.length} Produkte · sortiert nach |Δ| · <span class="text-sky-500">Klick → Einzelkonten</span>`;
 
   let html = `<table class="w-full text-xs">
     <thead class="text-left text-slate-400">
@@ -1295,7 +1335,7 @@ function showJVDrilldown(tpNr) {
     const dStr   = d !== 0 ? (d > 0 ? "+" : "") + fmtMio(d) : "–";
     const pStr   = pct !== null ? (pct > 0 ? "+" : "") + fmt(pct, 1) + "%" : "–";
     const rgId   = "jvrg-" + p.produkt_nummer;
-    html += `<tr class="border-b border-slate-700/40 hover:bg-slate-700/20 cursor-pointer" onclick="toggleJVDetail('${p.produkt_nummer}')">
+    html += `<tr class="border-b border-slate-700/40 hover:bg-slate-700/20 cursor-pointer" title="Klick: Einzelkonten ein-/ausblenden" onclick="toggleJVDetail('${p.produkt_nummer}')">
       <td class="pr-2 py-1.5 font-mono text-slate-500">${escHtml(p.produkt_nummer)}</td>
       <td class="pr-3 py-1.5 text-slate-200">${escHtml(p.bezeichnung)}</td>
       <td class="pr-2 py-1.5"><span class="tag ${skTagClass(p.steuerungs_code)}">${SK_LABEL[p.steuerungs_code] || p.steuerungs_code}</span></td>
@@ -1304,11 +1344,13 @@ function showJVDrilldown(tpNr) {
       <td class="text-right pr-2 py-1.5 font-mono ${dColor}">${dStr}</td>
       <td class="text-right py-1.5 font-mono ${dColor}">${pStr}</td>
     </tr>
-    ${p.rechtsgrundlage ? `<tr id="${rgId}" class="hidden"><td colspan="7" class="px-3 py-2 text-xs text-slate-400 bg-slate-800/60 border-b border-slate-700/40"><div class="border-l-2 border-slate-600 pl-2 leading-relaxed">${escHtml(p.rechtsgrundlage)}</div></td></tr>` : ""}`;
+    <tr id="${rgId}" class="hidden"><td colspan="7" class="px-3 pb-3 bg-slate-800/40 border-b border-slate-700/40">
+      ${p.rechtsgrundlage ? `<div class="border-l-2 border-slate-600 pl-2 mt-2 mb-1 text-slate-400 text-xs leading-relaxed">${escHtml(p.rechtsgrundlage)}</div>` : ""}
+      ${buildJVKontenHTML(p.produkt_nummer, tpNr)}
+    </td></tr>`;
   });
 
   html += `</tbody></table>`;
-
   document.getElementById("jv-dd-body").innerHTML = html;
 }
 
