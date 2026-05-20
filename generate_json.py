@@ -565,6 +565,77 @@ def make_personal(con):
     }
 
 
+def make_stellenplan(con):
+    """
+    Exportiert Stellenplan-Daten (besoldungsgruppen + stellenplan) je Jahr.
+    Gibt None zurück, falls die Tabellen noch leer sind.
+    """
+    count = con.execute("SELECT COUNT(*) FROM stellenplan").fetchone()[0]
+    if count == 0:
+        return None
+
+    rows_all = con.execute("""
+        SELECT bg.kuerzel, bg.typ,
+               t.nummer AS tp_nr,
+               s.daten_jahr, s.wert_typ, s.planstellen
+        FROM stellenplan s
+        JOIN besoldungsgruppen bg ON s.besoldungsgruppe_id = bg.id
+        JOIN teilplaene t         ON s.teilplan_id         = t.id
+        ORDER BY s.daten_jahr, s.wert_typ, bg.typ, bg.kuerzel
+    """).fetchall()
+
+    # Alle bekannten Jahre + wert_typen
+    jahre = sorted({r["daten_jahr"] for r in rows_all})
+    by_year = {}
+
+    for yr in jahre:
+        for wt in ["PLAN_ANSATZ", "IST"]:
+            rows = [r for r in rows_all if r["daten_jahr"] == yr and r["wert_typ"] == wt]
+            if not rows:
+                continue
+
+            # Aggregation je typ
+            beamte = sum(r["planstellen"] for r in rows if r["typ"] == "BEAMTE")
+            tarif  = sum(r["planstellen"] for r in rows if r["typ"] == "TARIF")
+
+            # nach TP
+            nach_tp: dict[str, dict] = {}
+            for r in rows:
+                tp = r["tp_nr"]
+                if tp not in nach_tp:
+                    nach_tp[tp] = {"beamte": 0.0, "tarif": 0.0}
+                nach_tp[tp][r["typ"].lower()] += r["planstellen"]
+            for td in nach_tp.values():
+                td["gesamt"] = round(td["beamte"] + td["tarif"], 3)
+                td["beamte"] = round(td["beamte"], 3)
+                td["tarif"]  = round(td["tarif"],  3)
+
+            # nach Besoldungsgruppe (gesamt über alle TPs)
+            nach_gruppe: dict[str, dict] = {}
+            for r in rows:
+                kg = r["kuerzel"]
+                if kg not in nach_gruppe:
+                    nach_gruppe[kg] = {"typ": r["typ"], "planstellen": 0.0}
+                nach_gruppe[kg]["planstellen"] += r["planstellen"]
+            nach_gruppe = {
+                kg: {"typ": v["typ"], "planstellen": round(v["planstellen"], 3)}
+                for kg, v in sorted(nach_gruppe.items())
+            }
+
+            key = f"{yr}_{wt}"
+            by_year[key] = {
+                "daten_jahr":  yr,
+                "wert_typ":    wt,
+                "gesamt":      round(beamte + tarif, 3),
+                "beamte":      round(beamte, 3),
+                "tarif":       round(tarif,  3),
+                "nach_tp":     {tp: v for tp, v in sorted(nach_tp.items())},
+                "nach_gruppe": nach_gruppe,
+            }
+
+    return {"by_year": by_year} if by_year else None
+
+
 def main():
     con = sqlite3.connect(DB_PATH)
     con.row_factory = sqlite3.Row
@@ -706,6 +777,11 @@ def main():
     # ── Personal-Tab ──────────────────────────────────────────────────────────
     result["personal"] = make_personal(con)
 
+    # ── Stellenplan ───────────────────────────────────────────────────────────
+    sp = make_stellenplan(con)
+    if sp:
+        result["personal"]["stellenplan"] = sp
+
     # ── Ausgabe ───────────────────────────────────────────────────────────────
     with open(OUT_PATH, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, separators=(",", ":"))
@@ -721,6 +797,7 @@ def main():
         ("Simulator-Produkte", len(sim)),
         ("Details-Produkte",   dtl_total),
         ("Personal-Gruppen",   len(result["personal"]["gruppen_labels"])),
+        ("Stellenplan-Keys",   len(result["personal"].get("stellenplan", {}).get("by_year", {}))),
     ]:
         print(f"     {k+':':25s} {v}")
     for yr in [2023, 2024, 2025]:
