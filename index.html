@@ -2051,11 +2051,13 @@ renderSimListe = function() {
       '</div>' +
       '<div class="slider-row">' +
         // Zone-Bar: zeigt HSK-Zone (blau) und eigene Zusatz-Zone (orange)
-        '<div class="relative mb-1">' +
-          '<div id="zone-' + p.produkt_nummer + '" class="w-full h-2 rounded-full bg-slate-700/50"></div>' +
+        '<div class="relative mb-1.5">' +
+          '<div id="zone-' + p.produkt_nummer + '"' +
+            ' class="w-full h-3 rounded bg-slate-700"></div>' +
           (hskSpar && p.kk5_2025 && p.max_kuerzung_pct > 0
-            ? '<span class="absolute top-0 h-2 w-px bg-blue-400/80 pointer-events-none"' +
-              ' style="left:' + Math.min(hskSpar/p.kk5_2025*100/p.max_kuerzung_pct*100, 100) + '%"></span>'
+            ? '<div class="absolute top-0 h-3 w-0.5 rounded-full bg-blue-300 pointer-events-none"' +
+              ' title="HSK-Einsparziel"' +
+              ' style="left:' + Math.min(hskSpar/p.kk5_2025*100/p.max_kuerzung_pct*100, 100).toFixed(1) + '%"></div>'
             : '') +
         '</div>' +
         '<input type="range" min="0" max="' + p.max_kuerzung_pct + '" step="1" value="' + cur + '"' +
@@ -2152,28 +2154,29 @@ function updateSimZoneBar(pnr) {
   var maxV = parseFloat(el.max) || 100;
   var curV = parseFloat(el.value) || 0;
   var hskV = parseFloat(el.dataset.hskPct) || 0;
-  if (maxV === 0) { bar.style.background = '#1e293b'; return; }
-  var hskPos = Math.min(hskV / maxV * 100, 100);
-  var curPos = Math.min(curV / maxV * 100, 100);
-  var stops;
-  if (hskPos === 0 && curPos === 0) {
-    stops = '#1e293b 0%, #1e293b 100%';
-  } else if (curPos >= hskPos) {
-    // Blau (HSK) | Orange (Zusatz) | Grau (Rest)
-    var s = '';
-    if (hskPos > 0) s += '#3b82f6 0%, #3b82f6 ' + hskPos + '%, ';
-    if (curPos > hskPos) s += '#f97316 ' + hskPos + '%, #f97316 ' + curPos + '%, ';
-    s += '#1e293b ' + curPos + '%, #1e293b 100%';
-    stops = s;
+  if (maxV === 0) { bar.style.background = '#334155'; return; }
+  var hp = Math.min(hskV / maxV * 100, 100);  // HSK-Position %
+  var cp = Math.min(curV / maxV * 100, 100);  // Slider-Position %
+  // Farben: #60a5fa = blau-400, #f97316 = orange-500, #1e40af = blau-800, #334155 = slate-700
+  var s;
+  if (hp === 0 && cp === 0) {
+    // Kein HSK-Ziel, kein Schieberegler: neutraler Hintergrund
+    s = '#334155 0%, #334155 100%';
+  } else if (hp > 0 && cp === 0) {
+    // HSK-Ziel sichtbar, Schieberegler noch auf 0
+    s = '#60a5fa 0%, #60a5fa ' + hp + '%, #334155 ' + hp + '%, #334155 100%';
+  } else if (cp >= hp) {
+    // Schieberegler >= HSK: blau bis HSK, orange darueber
+    s = (hp > 0 ? '#60a5fa 0%, #60a5fa ' + hp + '%, ' : '') +
+        '#f97316 ' + hp + '%, #f97316 ' + cp + '%, ' +
+        '#334155 ' + cp + '%, #334155 100%';
   } else {
-    // Gelb-Orange (teilerfuellt) | Dunkelblau (noch offen bis HSK) | Grau
-    var s2 = '';
-    if (curPos > 0) s2 += '#f97316 0%, #f97316 ' + curPos + '%, ';
-    s2 += '#1d4ed8 ' + curPos + '%, #1d4ed8 ' + hskPos + '%, ';
-    s2 += '#1e293b ' + hskPos + '%, #1e293b 100%';
-    stops = s2;
+    // Schieberegler < HSK: orange bis Slider, dunkles Blau bis HSK (offen)
+    s = (cp > 0 ? '#f97316 0%, #f97316 ' + cp + '%, ' : '') +
+        '#1e40af ' + cp + '%, #1e40af ' + hp + '%, ' +
+        '#334155 ' + hp + '%, #334155 100%';
   }
-  bar.style.background = 'linear-gradient(to right, ' + stops + ')';
+  bar.style.background = 'linear-gradient(to right, ' + s + ')';
 }
 
 // onSlider: Zone-Bar nach jeder Slider-Bewegung aktualisieren
