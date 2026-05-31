@@ -851,6 +851,7 @@ def make_hsk(con) -> dict:
                 "hsk_ziel": round(hsk_z or 0),
                 "kk4": round(kk4 or 0),
                 "kk5": round(kk5 or 0),
+                "wert_typ": "IST" if jahr <= 2023 else "PLAN",
             }
     except Exception:
         pass  # VIEW noch nicht vorhanden
@@ -864,6 +865,7 @@ def make_hsk(con) -> dict:
     """):
         jw = jahreswerte_map.get(m[0], {})
         ab = abgleich_map.get(m[0], {})
+        wirksam_ab = min((y for y, v in jw.items() if v != 0), default=None)
 
         # Tendenz: bewegt sich Haushalt in Richtung HSK-Ziel?
         tendenz = None
@@ -897,6 +899,7 @@ def make_hsk(con) -> dict:
             "kategorie":   m[12],
             "beschreibung": m[13] or "",
             "jahreswerte": {str(y): round(jw.get(y, 0)) for y in YEARS},
+            "wirksam_ab":  wirksam_ab,
             "abgleich":    ab,
             "tendenz":     tendenz,
         })
