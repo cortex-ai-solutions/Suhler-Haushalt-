@@ -99,9 +99,9 @@
   <div class="tab active" data-tab="overview">Überblick</div>
   <div class="tab" data-tab="details">Details</div>
   <div class="tab" data-tab="personal">Personal</div>
-  <div class="tab" data-tab="hsk">HSK</div>
   <div class="tab" data-tab="jahresvergleich">Jahresvergleich</div>
   <div class="tab" data-tab="zeitreihe">Zeitreihe</div>
+  <div class="tab" data-tab="hsk">HSK &amp; Konsolidierung</div>
   <div class="tab" data-tab="simulator">Konsolidierungs-Simulator</div>
 </div>
 
@@ -1880,7 +1880,7 @@ buildAbgleichCard = function(m) {
 };
 
 function setupTabs() {
-  const TABS = ["overview", "details", "personal", "hsk", "jahresvergleich", "zeitreihe", "simulator"];
+  const TABS = ["overview", "details", "personal", "jahresvergleich", "zeitreihe", "hsk", "simulator"];
   document.querySelectorAll("#tabbar .tab").forEach(tab => {
     tab.addEventListener("click", () => {
       document.querySelectorAll("#tabbar .tab").forEach(t => t.classList.remove("active"));
