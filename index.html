@@ -2090,9 +2090,8 @@ function navigateToHskTP(tpNr, tpName) {
   var lbl  = document.getElementById('hsk-tp-filter-label');
   if (info) info.classList.remove('hidden');
   if (lbl)  lbl.textContent = 'TP ' + tpNr + ' \u2013 ' + tpName;
-  // HSK rendern
-  if (typeof initHsk === 'function') initHsk();
-  if (typeof renderHsk === 'function') renderHsk();
+  // Tabelle direkt neu rendern (renderHsk hat _hskRendered-Guard)
+  if (typeof renderHskTable === 'function') renderHskTable();
   // Zur Tabelle scrollen
   var tbl = document.getElementById('hsk-tabelle');
   if (tbl) tbl.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2111,9 +2110,7 @@ renderHskTable = function() {
   if (!_hskTPFilter) { _rht_tp_orig(); return; }
   var allM = DATA.hsk.massnahmen;
   DATA.hsk.massnahmen = allM.filter(function(m) {
-    return Object.values(m.abgleich || {}).some(function(pd) {
-      return pd.tp_nr === _hskTPFilter;
-    });
+    return m.tp_nr === _hskTPFilter;
   });
   _rht_tp_orig();
   DATA.hsk.massnahmen = allM;

@@ -866,6 +866,8 @@ def make_hsk(con) -> dict:
         jw = jahreswerte_map.get(m[0], {})
         ab = abgleich_map.get(m[0], {})
         wirksam_ab = min((y for y, v in jw.items() if v != 0), default=None)
+        # Primärer TP aus abgleich ableiten (erster Eintrag mit tp_nr)
+        primary_tp = next((pd["tp_nr"] for pd in ab.values() if pd.get("tp_nr")), None)
 
         # Tendenz: bewegt sich Haushalt in Richtung HSK-Ziel?
         tendenz = None
@@ -900,6 +902,7 @@ def make_hsk(con) -> dict:
             "beschreibung": m[13] or "",
             "jahreswerte": {str(y): round(jw.get(y, 0)) for y in YEARS},
             "wirksam_ab":  wirksam_ab,
+            "tp_nr":       primary_tp,
             "abgleich":    ab,
             "tendenz":     tendenz,
         })
