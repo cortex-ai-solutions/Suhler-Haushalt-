@@ -832,6 +832,29 @@ def make_hsk(con) -> dict:
     for r in con.execute("SELECT massnahme_id, jahr, umgesetzter_betrag FROM hsk_jahreswerte"):
         jahreswerte_map.setdefault(r[0], {})[r[1]] = r[2]
 
+    # Abgleich-Daten aus VIEW hsk_abgleich
+    abgleich_map: dict[int, dict] = {}
+    try:
+        for r in con.execute("""
+            SELECT massnahme_id, produkt_nummer, produkt_bez, tp_nr, tp_bez,
+                   jahr, hsk_ziel, haushalt_kk4, haushalt_kk5
+            FROM hsk_abgleich
+        """):
+            mid, prod, pbez, tp_nr, tp_bez, jahr, hsk_z, kk4, kk5 = r
+            pd = abgleich_map.setdefault(mid, {}).setdefault(prod, {
+                "bezeichnung": pbez or "",
+                "tp_nr": tp_nr or "",
+                "tp_bez": tp_bez or "",
+                "jahre": {},
+            })
+            pd["jahre"][str(jahr)] = {
+                "hsk_ziel": round(hsk_z or 0),
+                "kk4": round(kk4 or 0),
+                "kk5": round(kk5 or 0),
+            }
+    except Exception:
+        pass  # VIEW noch nicht vorhanden
+
     massnahmen = []
     for m in con.execute("""
         SELECT id, nr, bezeichnung, produkte, verantwortlich, rechtsform,
@@ -840,22 +863,42 @@ def make_hsk(con) -> dict:
         FROM hsk_massnahmen ORDER BY CAST(nr AS INTEGER), nr
     """):
         jw = jahreswerte_map.get(m[0], {})
+        ab = abgleich_map.get(m[0], {})
+
+        # Tendenz: bewegt sich Haushalt in Richtung HSK-Ziel?
+        tendenz = None
+        if ab:
+            kat = m[12]
+            for pd in ab.values():
+                j = pd["jahre"]
+                v23 = j.get("2023", {})
+                v25 = j.get("2025", {})
+                if not v23 or not v25:
+                    continue
+                if kat == "ERTRAG":
+                    tendenz = "positiv" if v25["kk4"] > v23["kk4"] else "negativ"
+                else:
+                    tendenz = "positiv" if v25["kk5"] < v23["kk5"] else "negativ"
+                break
+
         massnahmen.append({
-            "id":         m[0],
-            "nr":         m[1],
+            "id":          m[0],
+            "nr":          m[1],
             "bezeichnung": m[2],
-            "produkte":   [p.strip() for p in (m[3] or "").split(",") if p.strip()],
+            "produkte":    [p.strip() for p in (m[3] or "").split(",") if p.strip()],
             "verantwortlich": m[4],
-            "rechtsform": m[5],
+            "rechtsform":  m[5],
             "betrag_kumulativ": round(m[6] or 0),
             "betrag_2023":      round(m[7] or 0),
             "betrag_2024":      round(m[8] or 0),
             "betrag_2025":      round(m[9] or 0),
             "betrag_gesamt":    round(m[10] or 0),
-            "status":     m[11],
-            "kategorie":  m[12],
+            "status":      m[11],
+            "kategorie":   m[12],
             "beschreibung": m[13] or "",
             "jahreswerte": {str(y): round(jw.get(y, 0)) for y in YEARS},
+            "abgleich":    ab,
+            "tendenz":     tendenz,
         })
 
     # Meta-Kennzahlen
@@ -892,6 +935,9 @@ def make_hsk(con) -> dict:
             "gesamt_2024": round(tot[4] or 0),
             "gesamt_2025": round(tot[5] or 0),
             "gesamt_total": round(tot[6] or 0),
+            "n_mit_abgleich": sum(1 for m in massnahmen if m["abgleich"]),
+            "n_tendenz_positiv": sum(1 for m in massnahmen if m["tendenz"] == "positiv"),
+            "n_tendenz_negativ": sum(1 for m in massnahmen if m["tendenz"] == "negativ"),
         },
         "kumulativ_timeline": kumulativ_timeline,
         "massnahmen": massnahmen,
