@@ -299,12 +299,49 @@ CREATE TABLE IF NOT EXISTS hsk_jahreswerte (
     umgesetzter_betrag  REAL DEFAULT 0,
     UNIQUE(massnahme_id, jahr)
 );
+
+CREATE TABLE IF NOT EXISTS hsk_massnahmen_produkte (
+    massnahme_id    INTEGER NOT NULL REFERENCES hsk_massnahmen(id) ON DELETE CASCADE,
+    produkt_nummer  TEXT NOT NULL,
+    PRIMARY KEY(massnahme_id, produkt_nummer)
+);
+"""
+
+DDL_HSK_VIEW = """
+DROP VIEW IF EXISTS hsk_abgleich;
+CREATE VIEW hsk_abgleich AS
+SELECT
+    m.id            AS massnahme_id,
+    m.nr            AS massnahme_nr,
+    m.bezeichnung   AS massnahme_bez,
+    m.kategorie,
+    m.umsetzungsstatus,
+    mp.produkt_nummer,
+    p.bezeichnung   AS produkt_bez,
+    tp.nummer       AS tp_nr,
+    tp.bezeichnung  AS tp_bez,
+    j.jahr,
+    j.umgesetzter_betrag                                                AS hsk_ziel,
+    COALESCE(SUM(CASE WHEN kk.nummer=4 THEN h.betrag ELSE 0 END),0)    AS haushalt_kk4,
+    COALESCE(SUM(CASE WHEN kk.nummer=5 THEN h.betrag ELSE 0 END),0)    AS haushalt_kk5
+FROM hsk_massnahmen m
+JOIN hsk_massnahmen_produkte mp ON mp.massnahme_id = m.id
+JOIN hsk_jahreswerte j          ON j.massnahme_id  = m.id
+LEFT JOIN produkte    p  ON p.produkt_nummer = mp.produkt_nummer
+LEFT JOIN teilplaene  tp ON p.teilplan_id    = tp.id
+LEFT JOIN haushaltswerte h ON h.produkt_id = p.id
+    AND h.daten_jahr = j.jahr AND h.wert_typ = 'PLAN_ANSATZ'
+LEFT JOIN konten k ON h.konto_id = k.id
+LEFT JOIN kontenklassen kk ON k.kontenklasse_id = kk.id AND kk.nummer IN (4,5)
+WHERE j.jahr IN (2022, 2023, 2024, 2025)
+GROUP BY m.id, mp.produkt_nummer, j.jahr;
 """
 
 
 def add_hsk_tables(con):
     con.executescript(DDL_HSK)
-    print("  [OK] HSK-Tabellen sichergestellt")
+    con.executescript(DDL_HSK_VIEW)
+    print("  [OK] HSK-Tabellen + Abgleich-View sichergestellt")
 
 
 def main():

@@ -371,6 +371,7 @@ def derive_status(kumulativ: float, b24: float, b25: float, bezeichnung: str) ->
 # ── DB-Insert ─────────────────────────────────────────────────────────────────
 
 def insert_into_db(measures: list[dict]) -> None:
+    import re as _re
     con = sqlite3.connect(DB_PATH)
     con.execute("PRAGMA foreign_keys = ON")
     add_hsk_tables(con)
@@ -399,13 +400,24 @@ def insert_into_db(measures: list[dict]) -> None:
                  amounts["betrag_gesamt"], m["beschreibung"] or None),
             )
             mid = cur.lastrowid
+
+            # Jahreswerte
             for jahr in YEARS:
-                betrag = m["jahr_map"].get(jahr, 0.0)
                 con.execute(
                     """INSERT OR REPLACE INTO hsk_jahreswerte
                        (massnahme_id, jahr, umgesetzter_betrag) VALUES (?,?,?)""",
-                    (mid, jahr, betrag),
+                    (mid, jahr, m["jahr_map"].get(jahr, 0.0)),
                 )
+
+            # Normalisierte Produktverknüpfung (nur vollständige 6-stellige Nummern)
+            con.execute("DELETE FROM hsk_massnahmen_produkte WHERE massnahme_id=?", (mid,))
+            for prod in m["produkte"]:
+                if _re.match(r"^\d{6}$", prod):
+                    con.execute(
+                        "INSERT OR IGNORE INTO hsk_massnahmen_produkte (massnahme_id, produkt_nummer) VALUES (?,?)",
+                        (mid, prod),
+                    )
+
             inserted += 1
         except sqlite3.IntegrityError as e:
             print(f"  [WARN] Nr {m['nr']}: {e}", file=sys.stderr)
