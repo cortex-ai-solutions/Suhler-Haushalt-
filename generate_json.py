@@ -771,6 +771,9 @@ def main():
         }
     ]
 
+    # ── HSK bereits hier als Funktion (wird später in result geschrieben) ────
+    # (make_hsk defined below main, called after all other sections)
+
     # ── Details-Drill-Down (TP → Produkte → Konten) ──────────────────────────
     result["details_tp"] = make_details_tp(con)
 
@@ -781,6 +784,9 @@ def main():
     sp = make_stellenplan(con)
     if sp:
         result["personal"]["stellenplan"] = sp
+
+    # ── HSK-Maßnahmen ─────────────────────────────────────────────────────────
+    result["hsk"] = make_hsk(con)
 
     # ── Ausgabe ───────────────────────────────────────────────────────────────
     with open(OUT_PATH, "w", encoding="utf-8") as f:
@@ -798,12 +804,98 @@ def main():
         ("Details-Produkte",   dtl_total),
         ("Personal-Gruppen",   len(result["personal"]["gruppen_labels"])),
         ("Stellenplan-Keys",   len(result["personal"].get("stellenplan", {}).get("by_year", {}))),
+        ("HSK-Massnahmen",     len(result.get("hsk", {}).get("massnahmen", []))),
     ]:
         print(f"     {k+':':25s} {v}")
     for yr in [2023, 2024, 2025]:
         m = by_year[str(yr)]["meta"]
         print(f"     {f'ETL KK4 {yr}:':25s} {m['ertraege_etl']:>15,.2f}  (GT {GT_BY_YEAR[yr]['ertraege']:>15,.2f})")
         print(f"     {f'ETL KK5 {yr}:':25s} {m['aufwendungen_etl']:>15,.2f}  (GT {GT_BY_YEAR[yr]['aufwendungen']:>15,.2f})")
+
+
+def make_hsk(con) -> dict:
+    """
+    Exportiert HSK-Maßnahmen für das Dashboard.
+    Gibt None zurück, wenn die Tabellen noch nicht existieren oder leer sind.
+    """
+    try:
+        count = con.execute("SELECT COUNT(*) FROM hsk_massnahmen").fetchone()[0]
+        if count == 0:
+            return None
+    except Exception:
+        return None
+
+    YEARS = [2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025]
+
+    # Jahreswerte pro Maßnahme
+    jahreswerte_map: dict[int, dict[int, float]] = {}
+    for r in con.execute("SELECT massnahme_id, jahr, umgesetzter_betrag FROM hsk_jahreswerte"):
+        jahreswerte_map.setdefault(r[0], {})[r[1]] = r[2]
+
+    massnahmen = []
+    for m in con.execute("""
+        SELECT id, nr, bezeichnung, produkte, verantwortlich, rechtsform,
+               betrag_kumulativ, betrag_2023, betrag_2024, betrag_2025,
+               betrag_gesamt, umsetzungsstatus, kategorie, beschreibung
+        FROM hsk_massnahmen ORDER BY CAST(nr AS INTEGER), nr
+    """):
+        jw = jahreswerte_map.get(m[0], {})
+        massnahmen.append({
+            "id":         m[0],
+            "nr":         m[1],
+            "bezeichnung": m[2],
+            "produkte":   [p.strip() for p in (m[3] or "").split(",") if p.strip()],
+            "verantwortlich": m[4],
+            "rechtsform": m[5],
+            "betrag_kumulativ": round(m[6] or 0),
+            "betrag_2023":      round(m[7] or 0),
+            "betrag_2024":      round(m[8] or 0),
+            "betrag_2025":      round(m[9] or 0),
+            "betrag_gesamt":    round(m[10] or 0),
+            "status":     m[11],
+            "kategorie":  m[12],
+            "beschreibung": m[13] or "",
+            "jahreswerte": {str(y): round(jw.get(y, 0)) for y in YEARS},
+        })
+
+    # Meta-Kennzahlen
+    tot = con.execute("""
+        SELECT
+          SUM(CASE WHEN umsetzungsstatus='aktiv' THEN 1 ELSE 0 END) AS n_aktiv,
+          SUM(CASE WHEN umsetzungsstatus='erledigt' THEN 1 ELSE 0 END) AS n_erledigt,
+          SUM(CASE WHEN umsetzungsstatus='entfallen' THEN 1 ELSE 0 END) AS n_entfallen,
+          SUM(betrag_kumulativ) AS gesamt_kumulativ,
+          SUM(betrag_2024) AS gesamt_2024,
+          SUM(betrag_2025) AS gesamt_2025,
+          SUM(betrag_gesamt) AS gesamt_total
+        FROM hsk_massnahmen
+    """).fetchone()
+
+    # Kumulativverlauf je Jahr (für Timeline-Chart)
+    kumulativ_timeline = {}
+    for r in con.execute("""
+        SELECT j.jahr, SUM(j.umgesetzter_betrag) AS summe
+        FROM hsk_jahreswerte j
+        GROUP BY j.jahr ORDER BY j.jahr
+    """):
+        kumulativ_timeline[str(r[0])] = round(r[1] or 0)
+
+    return {
+        "meta": {
+            "fortschreibung": 9,
+            "beschluss_datum": "2023-09-07",
+            "n_massnahmen": count,
+            "n_aktiv": tot[0] or 0,
+            "n_erledigt": tot[1] or 0,
+            "n_entfallen": tot[2] or 0,
+            "gesamt_kumulativ_2013_2022": round(tot[3] or 0),
+            "gesamt_2024": round(tot[4] or 0),
+            "gesamt_2025": round(tot[5] or 0),
+            "gesamt_total": round(tot[6] or 0),
+        },
+        "kumulativ_timeline": kumulativ_timeline,
+        "massnahmen": massnahmen,
+    }
 
 
 if __name__ == "__main__":

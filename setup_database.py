@@ -273,6 +273,40 @@ def create_view(con):
     print("✓ view_dashboard_flach erstellt")
 
 
+DDL_HSK = """
+CREATE TABLE IF NOT EXISTS hsk_massnahmen (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    nr                  TEXT UNIQUE NOT NULL,
+    bezeichnung         TEXT NOT NULL,
+    produkte            TEXT,
+    verantwortlich      TEXT,
+    rechtsform          TEXT,
+    ab_haushaltsjahr    INTEGER,
+    betrag_kumulativ    REAL DEFAULT 0,
+    betrag_2023         REAL DEFAULT 0,
+    betrag_2024         REAL DEFAULT 0,
+    betrag_2025         REAL DEFAULT 0,
+    betrag_gesamt       REAL DEFAULT 0,
+    umsetzungsstatus    TEXT CHECK(umsetzungsstatus IN ('aktiv','erledigt','entfallen','geprueft')),
+    kategorie           TEXT CHECK(kategorie IN ('ERTRAG','AUFWAND','PERSONAL')),
+    beschreibung        TEXT
+);
+
+CREATE TABLE IF NOT EXISTS hsk_jahreswerte (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    massnahme_id    INTEGER NOT NULL REFERENCES hsk_massnahmen(id) ON DELETE CASCADE,
+    jahr            INTEGER NOT NULL,
+    umgesetzter_betrag  REAL DEFAULT 0,
+    UNIQUE(massnahme_id, jahr)
+);
+"""
+
+
+def add_hsk_tables(con):
+    con.executescript(DDL_HSK)
+    print("  [OK] HSK-Tabellen sichergestellt")
+
+
 def main():
     print(f"Datenbank: {DB_PATH}\n")
     con = get_connection()
@@ -284,6 +318,7 @@ def main():
         seed_teilplaene(con)
         create_view(con)
         add_stellenplan_tables(con)
+        add_hsk_tables(con)
         con.commit()
         print("\n✓ setup_database.py erfolgreich abgeschlossen.")
     except Exception as exc:
