@@ -113,6 +113,75 @@ FALLBACK_KERNTHESEN = {
     ),
 }
 
+# Kosten-Vorteile: quantifizierte Belege aus den Quell-PDFs (absolut + prozentual)
+KOSTEN_VORTEILE = {
+    "hze_controlling": [
+        {
+            "beispiel": "Stationäre vs. ambulante Unterbringung",
+            "absolut": "ab 4.500 €/Monat je stationärem Fall (54.000 €/Jahr)",
+            "prozent": "ambulante Hilfen bis zu 90 % günstiger je Fall",
+            "beschreibung": (
+                "Stationäre Heimunterbringung kostet ein Vielfaches ambulanter SPFH oder "
+                "Erziehungsbeistandschaft. Jeder verhinderte stationäre Platz spart "
+                ">48.000 €/Jahr. (Berliner Controlling-Bericht, Senatsverwaltung)"
+            ),
+        }
+    ],
+    "kdu_erfurt": [
+        {
+            "beispiel": "Erfurt 2025 — 1-Personen-HH bis 48 m²",
+            "absolut": "Richtwert 5,79 €/m² → Mietobergrenze 278 €/Monat Nettokaltmiete",
+            "prozent": "33,4 % der Haushalte überschreiten den Richtwert",
+            "beschreibung": (
+                "Produkttheorie: Mietobergrenze = max. Wohnfläche × Richtwert/m². "
+                "Ohne schlüssiges Konzept müsste die tatsächliche (höhere) Miete "
+                "vollständig übernommen werden. (SK Erfurt 2025, Thome)"
+            ),
+        }
+    ],
+    "dena_strassenbeleuchtung": [
+        {
+            "beispiel": "Dillenburg",
+            "absolut": "nicht separat ausgewiesen",
+            "prozent": "52 % Stromeinsparung",
+            "beschreibung": "LED-Umrüstung mit Dimmkonzept (Praxisbeispiel dena 2016).",
+        },
+        {
+            "beispiel": "Guben",
+            "absolut": "nicht separat ausgewiesen",
+            "prozent": "60 % Stromeinsparung",
+            "beschreibung": "Vollständige LED-Modernisierung (Praxisbeispiel dena 2016).",
+        },
+        {
+            "beispiel": "Leipzig",
+            "absolut": "nicht separat ausgewiesen",
+            "prozent": "74 % Stromeinsparung",
+            "beschreibung": "Umfassendes LED- und Dimmungsprogramm (Praxisbeispiel dena 2016).",
+        },
+        {
+            "beispiel": "Bundesweites Gesamtpotenzial",
+            "absolut": "ca. 2,2 Mrd. kWh/Jahr",
+            "prozent": "bis zu 80 % des Beleuchtungsstroms",
+            "beschreibung": (
+                "30–50 % des kommunalen Stromverbrauchs entfällt auf Straßenbeleuchtung; "
+                "davon bis zu 80 % durch Modernisierung + Dimmung einsparbar (dena 2016)."
+            ),
+        },
+    ],
+    "brandschutz_foerderung": [
+        {
+            "beispiel": "Zweckvereinbarung Fahrzeugbeschaffung (§ 5 ThürBKG)",
+            "absolut": "Investitionskosten HLF 20: ca. 400.000–500.000 €",
+            "prozent": "förderfähig nach TLVwA-Zuwendungsrichtlinie Thüringen",
+            "beschreibung": (
+                "Interkommunale Fahrzeugpools und geteilte Ausrüstungsstandorte "
+                "reduzieren Beschaffungskosten; förderfähig nach Thüringer "
+                "Brandschutzförderprogramm."
+            ),
+        }
+    ],
+}
+
 # ---------------------------------------------------------------------------
 # Schritt 1: Download
 # ---------------------------------------------------------------------------
@@ -267,9 +336,10 @@ def mine_source(source):
         print(f"  Kernthese (fallback): {kernthese[:100]}...")
 
     return {
-        "titel":        source["titel"],
-        "kernthese":    kernthese,
-        "download_url": source["url"],
+        "titel":          source["titel"],
+        "kernthese":      kernthese,
+        "download_url":   source["url"],
+        "kosten_vorteile": KOSTEN_VORTEILE.get(source["id"], []),
     }
 
 # ---------------------------------------------------------------------------

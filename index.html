@@ -2996,6 +2996,19 @@ function renderMerkzettel() {
 
 // ── Evidenzbasis-Sidebar ──────────────────────────────────────────────────
 
+// Hilfsfunktion: Detail-Toggle fuer Kosten-Vorteile-Sektionen
+// Labels werden aus data-ev-open / data-ev-close des Buttons gelesen
+function _evDetailToggle(btn) {
+  var id = btn.getAttribute('data-ev-detail');
+  var el = id ? document.getElementById(id) : null;
+  if (!el) return;
+  var hidden = el.classList.contains('hidden');
+  el.classList.toggle('hidden');
+  btn.innerHTML = hidden
+    ? btn.getAttribute('data-ev-open')
+    : btn.getAttribute('data-ev-close');
+}
+
 function openEvSidebar(p) {
   var sb = document.getElementById('ev-sidebar');
   var prodEl = document.getElementById('ev-sidebar-prod');
@@ -3009,7 +3022,49 @@ function openEvSidebar(p) {
   if (!evList.length) {
     content.innerHTML = '<div class="text-slate-500">Keine Evidenz vorhanden.</div>';
   } else {
-    content.innerHTML = evList.map(function(ev) {
+    content.innerHTML = evList.map(function(ev, idx) {
+      var detailId = 'sb-ev-detail-' + idx;
+
+      var kvHtml = '';
+      if (ev.kosten_vorteile && ev.kosten_vorteile.length) {
+        kvHtml =
+          '<div id="' + detailId + '" class="hidden mt-3 rounded' +
+          ' bg-slate-900/60 border border-slate-700/50 p-2">' +
+            '<div class="text-xs text-slate-500 font-medium mb-2' +
+            ' uppercase tracking-wide">Kosten-Vorteile</div>' +
+            ev.kosten_vorteile.map(function(kv) {
+              return '<div class="mb-2 pb-2 border-b border-slate-700/30">' +
+                '<div class="flex justify-between gap-2 mb-0.5">' +
+                  '<span class="text-xs font-medium text-slate-300 leading-snug">' +
+                    escHtml(kv.beispiel) +
+                  '</span>' +
+                  '<span class="text-xs text-blue-300 font-semibold' +
+                  ' whitespace-nowrap shrink-0">' +
+                    escHtml(kv.prozent) +
+                  '</span>' +
+                '</div>' +
+                '<div class="text-xs text-green-300 mb-0.5">' +
+                  escHtml(kv.absolut) +
+                '</div>' +
+                '<div class="text-xs text-slate-400 leading-relaxed">' +
+                  escHtml(kv.beschreibung) +
+                '</div>' +
+              '</div>';
+            }).join('') +
+          '</div>';
+      }
+
+      var detailBtn = (ev.kosten_vorteile && ev.kosten_vorteile.length)
+        ? '<button onclick="_evDetailToggle(this)"' +
+            ' data-ev-detail="' + detailId + '"' +
+            ' data-ev-open="&#9650;&ensp;Kosten-Vorteile"' +
+            ' data-ev-close="&#9660;&ensp;Kosten-Vorteile"' +
+            ' class="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded' +
+            ' bg-slate-700/50 text-slate-300 hover:bg-slate-600/60' +
+            ' border border-slate-600/50 transition-colors">' +
+            '&#9660;&ensp;Kosten-Vorteile</button>'
+        : '';
+
       return '<div class="rounded border border-slate-700 bg-slate-800/60 p-3">' +
         '<div class="text-blue-300 font-medium text-xs mb-2 leading-tight">' +
           escHtml(ev.titel) +
@@ -3017,12 +3072,17 @@ function openEvSidebar(p) {
         '<div class="text-slate-300 leading-relaxed text-xs mb-3">' +
           escHtml(ev.kernthese) +
         '</div>' +
-        '<a href="' + escHtml(ev.download_url) + '" target="_blank" rel="noopener noreferrer"' +
+        '<div class="flex flex-wrap gap-2">' +
+          detailBtn +
+          '<a href="' + escHtml(ev.download_url) + '"' +
+          ' target="_blank" rel="noopener noreferrer"' +
           ' class="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded' +
-          ' bg-blue-800/60 text-blue-200 hover:bg-blue-700/80 border border-blue-700/50' +
-          ' transition-colors">' +
-          '&#x2913;&ensp;Dokument herunterladen' +
-        '</a>' +
+          ' bg-blue-800/60 text-blue-200 hover:bg-blue-700/80' +
+          ' border border-blue-700/50 transition-colors">' +
+            '&#x2913;&ensp;Dokument herunterladen' +
+          '</a>' +
+        '</div>' +
+        kvHtml +
       '</div>';
     }).join('');
   }
@@ -3051,12 +3111,11 @@ document.addEventListener('click', function(e) {
     if (!DATA || !DATA.simulator_produkte) return;
     DATA.simulator_produkte.forEach(function(p) {
       if (!p.evidenz_basis || !p.evidenz_basis.length) return;
-      // Karte per zone-ID lokalisieren (.card ist der direkte Eltern-Container)
       var zoneEl = document.getElementById('zone-' + p.produkt_nummer);
       if (!zoneEl) return;
       var card = zoneEl.closest ? zoneEl.closest('.card') : null;
       if (!card) return;
-      if (card.querySelector('.ev-btn')) return; // bereits vorhanden
+      if (card.querySelector('.ev-btn')) return;
       var btn = document.createElement('button');
       btn.className = 'ev-btn mt-2 flex items-center gap-1 text-xs text-blue-400' +
         ' hover:text-blue-200 transition-colors';
@@ -3079,7 +3138,6 @@ function renderHskInfothek() {
   var tbody = document.getElementById('hsk-infothek-body');
   if (!tbody) return;
 
-  // Alle unique evidenz_basis aus simulator_produkte sammeln
   var seen = {};
   (DATA.simulator_produkte || []).forEach(function(p) {
     (p.evidenz_basis || []).forEach(function(ev) {
@@ -3087,7 +3145,6 @@ function renderHskInfothek() {
       if (!seen[key]) {
         seen[key] = { ev: ev, produkte: [] };
       }
-      // Nur 6-stellige (echte) Produkte anzeigen, keine 4-stelligen Rollups
       if (p.produkt_nummer.length >= 5 && parseFloat(p.kk5_2025 || 0) > 0) {
         seen[key].produkte.push(escHtml(p.bezeichnung));
       }
@@ -3101,36 +3158,91 @@ function renderHskInfothek() {
     return;
   }
 
-  tbody.innerHTML = entries.map(function(item) {
+  tbody.innerHTML = entries.map(function(item, idx) {
     var ev = item.ev;
+    var detailId = 'hsk-ev-detail-' + idx;
+
     var prodStr = item.produkte.length
       ? item.produkte.join('<br>')
       : '<span class="text-slate-500 italic">Gesamtquerschnitt</span>';
     var these = escHtml(ev.kernthese).substring(0, 140);
     if (ev.kernthese.length > 140) these += '&hellip;';
 
-    return '<tr class="border-b border-slate-700/40 hover:bg-slate-800/20">' +
-      '<td class="py-3 pr-4 align-top w-52">' +
-        '<div class="font-medium text-blue-300 text-xs leading-snug">' +
-          escHtml(ev.titel) +
-        '</div>' +
-      '</td>' +
-      '<td class="py-3 pr-4 align-top text-xs text-slate-400 w-48">' +
-        prodStr +
-      '</td>' +
-      '<td class="py-3 pr-4 align-top text-xs text-slate-300 leading-relaxed">' +
-        these +
-      '</td>' +
-      '<td class="py-3 align-top">' +
-        '<a href="' + escHtml(ev.download_url) + '"' +
-          ' target="_blank" rel="noopener noreferrer"' +
+    var kvRows = '';
+    if (ev.kosten_vorteile && ev.kosten_vorteile.length) {
+      kvRows = ev.kosten_vorteile.map(function(kv) {
+        return '<tr class="border-t border-slate-700/30">' +
+          '<td class="py-1.5 pr-3 text-xs text-slate-300 align-top w-36' +
+          ' leading-snug">' + escHtml(kv.beispiel) + '</td>' +
+          '<td class="py-1.5 pr-3 text-xs text-green-300 align-top' +
+          ' whitespace-nowrap">' + escHtml(kv.absolut) + '</td>' +
+          '<td class="py-1.5 pr-3 text-xs text-blue-300 align-top' +
+          ' font-semibold whitespace-nowrap">' + escHtml(kv.prozent) + '</td>' +
+          '<td class="py-1.5 text-xs text-slate-400 align-top' +
+          ' leading-relaxed">' + escHtml(kv.beschreibung) + '</td>' +
+        '</tr>';
+      }).join('');
+    }
+
+    var detailBtn = (ev.kosten_vorteile && ev.kosten_vorteile.length)
+      ? '<button onclick="_evDetailToggle(this)"' +
+          ' data-ev-detail="' + detailId + '"' +
+          ' data-ev-open="Detail&thinsp;&#9650;"' +
+          ' data-ev-close="Detail&thinsp;&#9660;"' +
           ' class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded' +
-          ' bg-blue-800/40 text-blue-300 hover:bg-blue-700/60' +
-          ' border border-blue-700/50 whitespace-nowrap transition-colors">' +
-          '&#x2913;&ensp;PDF' +
-        '</a>' +
-      '</td>' +
-    '</tr>';
+          ' bg-slate-700/50 text-slate-300 hover:bg-slate-600/60' +
+          ' border border-slate-600/50 whitespace-nowrap transition-colors">' +
+          'Detail&thinsp;&#9660;</button>'
+      : '';
+
+    var mainRow =
+      '<tr class="border-b border-slate-700/40 hover:bg-slate-800/20">' +
+        '<td class="py-3 pr-4 align-top w-52">' +
+          '<div class="font-medium text-blue-300 text-xs leading-snug">' +
+            escHtml(ev.titel) +
+          '</div>' +
+        '</td>' +
+        '<td class="py-3 pr-4 align-top text-xs text-slate-400 w-48">' +
+          prodStr +
+        '</td>' +
+        '<td class="py-3 pr-4 align-top text-xs text-slate-300 leading-relaxed">' +
+          these +
+        '</td>' +
+        '<td class="py-3 align-top">' +
+          '<div class="flex flex-col gap-1">' +
+            '<a href="' + escHtml(ev.download_url) + '"' +
+            ' target="_blank" rel="noopener noreferrer"' +
+            ' class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded' +
+            ' bg-blue-800/40 text-blue-300 hover:bg-blue-700/60' +
+            ' border border-blue-700/50 whitespace-nowrap transition-colors">' +
+              '&#x2913;&ensp;PDF' +
+            '</a>' +
+            detailBtn +
+          '</div>' +
+        '</td>' +
+      '</tr>';
+
+    var detailRow = kvRows
+      ? '<tr id="' + detailId + '" class="hidden">' +
+          '<td colspan="4" class="pb-3 pt-0 px-2">' +
+            '<div class="rounded bg-slate-800/40 border border-slate-700/40 p-3">' +
+              '<div class="text-xs text-slate-500 font-medium mb-2' +
+              ' uppercase tracking-wide">Kosten-Vorteile &ndash; Quellenbelege</div>' +
+              '<table class="w-full">' +
+                '<thead><tr class="text-left text-slate-500 text-xs">' +
+                  '<th class="pb-1 pr-3 font-medium w-36">Beispiel</th>' +
+                  '<th class="pb-1 pr-3 font-medium">Absolut</th>' +
+                  '<th class="pb-1 pr-3 font-medium">Prozent</th>' +
+                  '<th class="pb-1 font-medium">Erl&auml;uterung</th>' +
+                '</tr></thead>' +
+                '<tbody>' + kvRows + '</tbody>' +
+              '</table>' +
+            '</div>' +
+          '</td>' +
+        '</tr>'
+      : '';
+
+    return mainRow + detailRow;
   }).join('');
 }
 
