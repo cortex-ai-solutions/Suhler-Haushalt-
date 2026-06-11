@@ -11,6 +11,11 @@ from datetime import datetime
 
 import requests
 from pypdf import PdfReader
+try:
+    from pdfminer.high_level import extract_text as pdfminer_extract
+    HAS_PDFMINER = True
+except ImportError:
+    HAS_PDFMINER = False
 
 BASE_DIR     = Path(__file__).parent
 EVIDENCE_DIR = BASE_DIR / "evidence_sources"
@@ -52,9 +57,7 @@ SOURCES = [
                          "Dimmkonzept", "Lichtpunkt", "Energiekosten"],
         # Nur 5450 (Rollup) — 545110/545120 sind Friedhöfe, nicht Straßenbeleuchtung
         "target_produkte": ["5450"],
-        # dena-PDF hat mehrspaltige Layout-Artefakte (Chart-Labels) im Extrakt.
-        # Kuratierter Fallback aus Originalpassage ist praegnanter.
-        "force_fallback": True,
+        # force_fallback entfernt: pdfminer liefert sauberen Text (geprueft 2026-06-11)
     },
     {
         "id":       "brandschutz_foerderung",
@@ -64,7 +67,9 @@ SOURCES = [
         "keywords": ["Zweckvereinbarung", "ThurBKG", "5 ThurBKG", "gemeindeuebergreifend",
                      "Zusammenarbeit", "Foerderung", "Feuerwehr"],
         # 126010 = Berufsfeuerwehr, 1260 = Rollup; 126020 Ordnungsdienst gehoert nicht dazu
+        # ACHTUNG: URL liefert CAPTCHA-HTML (Link11-Schutz) statt PDF → force_fallback
         "target_produkte": ["1260", "126010"],
+        "force_fallback": True,
     },
 ]
 
@@ -145,6 +150,19 @@ def download_pdf(source):
 # Schritt 2: Text-Extraktion und Scoring
 # ---------------------------------------------------------------------------
 def extract_full_text(pdf_path):
+    """Extrahiert Text: pdfminer (primaer) → pypdf (Fallback)."""
+    # --- pdfminer (bessere Layout-Erkennung, korrekte Umlaute) ---
+    if HAS_PDFMINER:
+        try:
+            text = pdfminer_extract(str(pdf_path))
+            if text and len(text.strip()) > 200:
+                print("  [pdfminer] OK")
+                return text
+            print("  [pdfminer] Zu wenig Text — wechsle zu pypdf")
+        except Exception as exc:
+            print(f"  [pdfminer] Fehler: {exc} — wechsle zu pypdf")
+
+    # --- pypdf Fallback ---
     try:
         reader = PdfReader(str(pdf_path))
         parts = []
@@ -154,9 +172,12 @@ def extract_full_text(pdf_path):
                 parts.append(t)
             except Exception:
                 pass
-        return "\n".join(parts)
+        text = "\n".join(parts)
+        if text.strip():
+            print("  [pypdf] OK")
+        return text
     except Exception as exc:
-        print(f"  [WARN] pypdf Fehler: {exc}")
+        print(f"  [pypdf] Fehler: {exc}")
         return ""
 
 def clean_pdf_text(text):
