@@ -339,6 +339,15 @@
       </div>
     </div>
 
+
+    <!-- Stellenplan-TP-Accordion -->
+    <div class="card p-5">
+      <div class="flex items-center justify-between mb-4">
+        <div class="section-title">Stellen nach Teilplan &amp; Besoldungsgruppe</div>
+        <span class="note">Jahr: <span id="sp-tp-detail-yr"></span></span>
+      </div>
+      <div id="sp-tp-detail-body"></div>
+    </div>
   </div>
 
 </div>
@@ -803,6 +812,96 @@ function renderKPI() {
     const elS = document.getElementById("kpi-finanzsaldo");
     elS.textContent = fmtMio(saldo);
     elS.className = "kpi-value " + (saldo < 0 ? "text-rose-400" : "text-emerald-400");
+  };
+})();
+
+// ── Stellenplan TP-Detail-Accordion ────────────────────────────────
+(function() {
+  function renderSpTpDetail(sp, yr) {
+    var container = document.getElementById("sp-tp-detail-body");
+    if (!container || !sp) return;
+    var yrEl = document.getElementById("sp-tp-detail-yr");
+    if (yrEl) yrEl.textContent = yr + " Plan";
+    var detail = sp.nach_tp_detail || {};
+    var tps = Object.keys(detail).sort();
+    if (!tps.length) { container.innerHTML = '<p class="note">Keine Daten</p>'; return; }
+    var html = "";
+    tps.forEach(function(tp) {
+      var d = detail[tp];
+      var beamteTotal = d.beamte.reduce(function(s, x) { return s + x.planstellen; }, 0);
+      var tarifTotal  = d.tarif.reduce( function(s, x) { return s + x.planstellen; }, 0);
+      var gesamt = beamteTotal + tarifTotal;
+      var domId  = "sp-tp-det-" + tp;
+      html += '<div class="border border-slate-700 rounded-lg mb-2 overflow-hidden">';
+      html += '<button class="w-full flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-left';
+      html += ' hover:bg-slate-700/40 transition-colors"';
+      html += ' data-sptp="' + domId + '"';
+      html += ' onclick="_spTpToggle(this)">';
+      html += '<span class="text-slate-400 text-xs font-mono">TP' + tp + '</span>';
+      html += '<span class="text-slate-100 font-medium flex-1 text-sm">' + d.name + '</span>';
+      if (beamteTotal > 0) {
+        html += '<span class="text-xs bg-violet-900/40 text-violet-300 px-2 py-0.5 rounded">';
+        html += "Beamte: " + fmt(beamteTotal, 3) + "</span>";
+      }
+      html += '<span class="text-xs bg-emerald-900/40 text-emerald-300 px-2 py-0.5 rounded">';
+      html += "Tarif: " + fmt(tarifTotal, 3) + "</span>";
+      html += '<span class="text-xs text-slate-400">Ges.: ' + fmt(gesamt, 3) + '</span>';
+      html += '<span class="text-slate-500 text-xs ml-1">&#9660;</span>';
+      html += '</button>';
+      html += '<div id="' + domId + '" class="hidden px-4 pb-4 pt-2">';
+      html += '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">';
+      if (beamteTotal > 0) {
+        html += '<div>';
+        html += '<div class="text-xs font-semibold text-violet-300 mb-2">Beamtenstellen</div>';
+        html += '<table class="w-full text-xs border-collapse">';
+        html += '<thead><tr class="text-slate-400 border-b border-slate-700">';
+        html += '<th class="text-left pb-1.5 font-normal">Besoldungsgruppe</th>';
+        html += '<th class="text-right pb-1.5 font-normal">Stellen</th></tr></thead><tbody>';
+        d.beamte.forEach(function(b) {
+          html += '<tr class="border-b border-slate-800/40">';
+          html += '<td class="py-1 text-slate-300">' + b.kuerzel + '</td>';
+          html += '<td class="py-1 text-right text-violet-200">' + fmt(b.planstellen, 3) + '</td></tr>';
+        });
+        html += '<tr class="border-t border-slate-600 font-semibold">';
+        html += '<td class="pt-1.5 text-violet-300">Summe</td>';
+        html += '<td class="pt-1.5 text-right text-violet-300">' + fmt(beamteTotal, 3) + '</td></tr>';
+        html += '</tbody></table></div>';
+      }
+      html += '<div>';
+      html += '<div class="text-xs font-semibold text-emerald-300 mb-2">Tarifbesch&#228;ftigte</div>';
+      html += '<table class="w-full text-xs border-collapse">';
+      html += '<thead><tr class="text-slate-400 border-b border-slate-700">';
+      html += '<th class="text-left pb-1.5 font-normal">Entgeltgruppe</th>';
+      html += '<th class="text-right pb-1.5 font-normal">Stellen</th></tr></thead><tbody>';
+      d.tarif.forEach(function(t) {
+        html += '<tr class="border-b border-slate-800/40">';
+        html += '<td class="py-1 text-slate-300">' + t.kuerzel + '</td>';
+        html += '<td class="py-1 text-right text-emerald-200">' + fmt(t.planstellen, 3) + '</td></tr>';
+      });
+      html += '<tr class="border-t border-slate-600 font-semibold">';
+      html += '<td class="pt-1.5 text-emerald-300">Summe</td>';
+      html += '<td class="pt-1.5 text-right text-emerald-300">' + fmt(tarifTotal, 3) + '</td></tr>';
+      html += '</tbody></table></div>';
+      html += '</div></div></div>';
+    });
+    container.innerHTML = html;
+  }
+
+  // Toggle-Helper: liest data-sptp statt Argument (kein Quoting-Problem)
+  window._spTpToggle = function(btn) {
+    var id = btn.getAttribute("data-sptp");
+    if (id) document.getElementById(id).classList.toggle("hidden");
+  };
+
+  // Monkey-Patch renderPersonal
+  var _origRP = renderPersonal;
+  renderPersonal = function() {
+    _origRP();
+    var SP = DATA && DATA.personal && DATA.personal.stellenplan;
+    if (!SP) return;
+    var yr = String(activeJahr);
+    var sp = SP.by_year[yr + "_PLAN_ANSATZ"] || SP.by_year["2025_PLAN_ANSATZ"];
+    renderSpTpDetail(sp, yr);
   };
 })();
 

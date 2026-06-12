@@ -643,15 +643,43 @@ def make_stellenplan(con):
                 for kg, v in sorted(nach_gruppe.items())
             }
 
+            # nach TP + Besoldungsgruppe (für aufklappbare Detailansicht)
+            nach_tp_detail: dict[str, dict] = {}
+            for r in rows:
+                tp = r["tp_nr"]
+                if tp not in nach_tp_detail:
+                    nach_tp_detail[tp] = {
+                        "name": TP_NAMEN_SCHOEN.get(tp, f"TP {tp}"),
+                        "beamte": {}, "tarif": {}
+                    }
+                kg = r["kuerzel"]
+                bucket = "beamte" if r["typ"] == "BEAMTE" else "tarif"
+                nach_tp_detail[tp][bucket][kg] = (
+                    nach_tp_detail[tp][bucket].get(kg, 0.0) + r["planstellen"]
+                )
+            # Auf Listen umformen, 0-Einträge filtern, sortieren
+            for tp_d in nach_tp_detail.values():
+                tp_d["beamte"] = sorted(
+                    [{"kuerzel": k, "planstellen": round(v, 3)}
+                     for k, v in tp_d["beamte"].items() if v > 0],
+                    key=lambda x: x["kuerzel"]
+                )
+                tp_d["tarif"] = sorted(
+                    [{"kuerzel": k, "planstellen": round(v, 3)}
+                     for k, v in tp_d["tarif"].items() if v > 0],
+                    key=lambda x: x["kuerzel"]
+                )
+
             key = f"{yr}_{wt}"
             by_year[key] = {
-                "daten_jahr":  yr,
-                "wert_typ":    wt,
-                "gesamt":      round(beamte + tarif, 3),
-                "beamte":      round(beamte, 3),
-                "tarif":       round(tarif,  3),
-                "nach_tp":     {tp: v for tp, v in sorted(nach_tp.items())},
-                "nach_gruppe": nach_gruppe,
+                "daten_jahr":    yr,
+                "wert_typ":      wt,
+                "gesamt":        round(beamte + tarif, 3),
+                "beamte":        round(beamte, 3),
+                "tarif":         round(tarif,  3),
+                "nach_tp":       {tp: v for tp, v in sorted(nach_tp.items())},
+                "nach_gruppe":   nach_gruppe,
+                "nach_tp_detail": {tp: v for tp, v in sorted(nach_tp_detail.items())},
             }
 
     return {"by_year": by_year} if by_year else None
