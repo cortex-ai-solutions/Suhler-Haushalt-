@@ -13,7 +13,8 @@ OUT_PATH = os.path.join(BASE_DIR, "budget_data.json")
 GT_BY_YEAR = {
     2023: {"ertraege": 129_315_250.00, "aufwendungen": 129_724_490.00, "ergebnis": -409_240.00},
     2024: {"ertraege": 130_353_020.00, "aufwendungen": 133_802_080.00, "ergebnis": -3_449_060.00},
-    2025: {"ertraege": 136_395_290.00, "aufwendungen": 138_003_230.00, "ergebnis": -1_607_940.00},
+    2025: {"ertraege": 136_395_290.00, "aufwendungen": 138_003_230.00, "ergebnis": -1_607_940.00,
+           "einzahlungen": 136_365_830.00, "auszahlungen": 135_802_480.00},
 }
 
 # Lesbare Produktnamen nach Thueringer Produktrahmen
@@ -334,6 +335,19 @@ def kk4_gruppe(konto_nr: str) -> str:
 
 
 def kk_sum_y(con, kk_nr, jahr, typ):
+    # For FINANZPLANUNG: use only the most recent HH-Plan document per daten_jahr
+    # (each document contains multi-year projections; without this filter we'd sum all)
+    if typ == "FINANZPLANUNG":
+        return con.execute("""
+            SELECT COALESCE(SUM(h.betrag),0) FROM haushaltswerte h
+            JOIN konten k ON h.konto_id=k.id
+            JOIN kontenklassen kk ON k.kontenklasse_id=kk.id
+            WHERE h.daten_jahr=? AND h.wert_typ=? AND kk.nummer=?
+              AND h.haushaltsplan_jahr = (
+                  SELECT MAX(h2.haushaltsplan_jahr) FROM haushaltswerte h2
+                  WHERE h2.daten_jahr=? AND h2.wert_typ='FINANZPLANUNG'
+              )
+        """, (jahr, typ, kk_nr, jahr)).fetchone()[0]
     return con.execute("""
         SELECT COALESCE(SUM(h.betrag),0) FROM haushaltswerte h
         JOIN konten k ON h.konto_id=k.id
@@ -344,15 +358,22 @@ def kk_sum_y(con, kk_nr, jahr, typ):
 
 def make_meta(con, jahr):
     gt = GT_BY_YEAR[jahr]
-    return {
+    meta = {
         "titel":               f"Haushaltsplan Stadt Suhl {jahr}",
         "ertraege_soll":       gt["ertraege"],
         "aufwendungen_soll":   gt["aufwendungen"],
         "jahresergebnis_soll": gt["ergebnis"],
         "ertraege_etl":        round(kk_sum_y(con, 4, jahr, "PLAN_ANSATZ"), 2),
         "aufwendungen_etl":    round(kk_sum_y(con, 5, jahr, "PLAN_ANSATZ"), 2),
+        "einzahlungen_etl":    round(kk_sum_y(con, 6, jahr, "PLAN_ANSATZ"), 2),
+        "auszahlungen_etl":    round(kk_sum_y(con, 7, jahr, "PLAN_ANSATZ"), 2),
         "generiert_am":        datetime.now().isoformat(),
     }
+    if "einzahlungen" in gt:
+        meta["einzahlungen_soll"]   = gt["einzahlungen"]
+        meta["auszahlungen_soll"]   = gt["auszahlungen"]
+        meta["finanzergebnis_soll"] = round(gt["einzahlungen"] - gt["auszahlungen"], 2)
+    return meta
 
 
 def make_teilplaene(con, jahr):
@@ -809,8 +830,13 @@ def main():
         print(f"     {k+':':25s} {v}")
     for yr in [2023, 2024, 2025]:
         m = by_year[str(yr)]["meta"]
-        print(f"     {f'ETL KK4 {yr}:':25s} {m['ertraege_etl']:>15,.2f}  (GT {GT_BY_YEAR[yr]['ertraege']:>15,.2f})")
-        print(f"     {f'ETL KK5 {yr}:':25s} {m['aufwendungen_etl']:>15,.2f}  (GT {GT_BY_YEAR[yr]['aufwendungen']:>15,.2f})")
+        gt = GT_BY_YEAR[yr]
+        print(f"     {f'ETL KK4 {yr}:':25s} {m['ertraege_etl']:>15,.2f}  (GT {gt['ertraege']:>15,.2f})")
+        print(f"     {f'ETL KK5 {yr}:':25s} {m['aufwendungen_etl']:>15,.2f}  (GT {gt['aufwendungen']:>15,.2f})")
+        gt_kk6 = f"GT {gt['einzahlungen']:>15,.2f}" if 'einzahlungen' in gt else "kein GT"
+        gt_kk7 = f"GT {gt['auszahlungen']:>15,.2f}" if 'auszahlungen' in gt else "kein GT"
+        print(f"     {f'ETL KK6 {yr}:':25s} {m['einzahlungen_etl']:>15,.2f}  ({gt_kk6})")
+        print(f"     {f'ETL KK7 {yr}:':25s} {m['auszahlungen_etl']:>15,.2f}  ({gt_kk7})")
 
 
 def make_hsk(con) -> dict:

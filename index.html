@@ -95,6 +95,27 @@
 </div>
 
 <!-- ─── TABS ──────────────────────────────────────────────────────────── -->
+
+<div class="mb-8">
+  <div class="text-sm font-medium text-slate-400 mb-2">Finanzplan (Zahlungsrechnung &ndash; KK6/KK7)</div>
+  <div class="grid grid-cols-3 gap-4" id="kpi-finanzplan-row">
+    <div class="card p-4">
+      <div class="kpi-label">Einzahlungen</div>
+      <div class="kpi-value text-emerald-400" id="kpi-einzahlungen">&ndash;</div>
+      <div class="note mt-1" id="kpi-einzahlungen-note">Finanzplan</div>
+    </div>
+    <div class="card p-4">
+      <div class="kpi-label">Auszahlungen</div>
+      <div class="kpi-value text-rose-400" id="kpi-auszahlungen">&ndash;</div>
+      <div class="note mt-1" id="kpi-auszahlungen-note">Finanzplan</div>
+    </div>
+    <div class="card p-4">
+      <div class="kpi-label">Finanzierungssaldo</div>
+      <div class="kpi-value text-amber-400" id="kpi-finanzsaldo">&ndash;</div>
+      <div class="note mt-1">Einzahlungen &ndash; Auszahlungen</div>
+    </div>
+  </div>
+</div>
 <div class="tabbar" id="tabbar">
   <div class="tab active" data-tab="overview">Überblick</div>
   <div class="tab" data-tab="details">Details</div>
@@ -765,6 +786,26 @@ function renderKPI() {
 }
 
 // ── SANKEY ────────────────────────────────────────────────────────────────
+(function() {
+  const _origKPI = renderKPI;
+  renderKPI = function() {
+    _origKPI();
+    const m = getYD().meta;
+    const einz  = m.einzahlungen_soll  !== undefined ? m.einzahlungen_soll  : (m.einzahlungen_etl  || 0);
+    const ausz  = m.auszahlungen_soll  !== undefined ? m.auszahlungen_soll  : (m.auszahlungen_etl  || 0);
+    const saldo = m.finanzergebnis_soll !== undefined ? m.finanzergebnis_soll : (einz - ausz);
+    const hasGT = m.einzahlungen_soll !== undefined;
+    const note  = hasGT ? ("Haushaltssatzung " + activeJahr) : "ETL-Sch\u00e4tzwert";
+    document.getElementById("kpi-einzahlungen").textContent = fmtMio(einz);
+    document.getElementById("kpi-auszahlungen").textContent = fmtMio(ausz);
+    document.getElementById("kpi-einzahlungen-note").textContent = note;
+    document.getElementById("kpi-auszahlungen-note").textContent = note;
+    const elS = document.getElementById("kpi-finanzsaldo");
+    elS.textContent = fmtMio(saldo);
+    elS.className = "kpi-value " + (saldo < 0 ? "text-rose-400" : "text-emerald-400");
+  };
+})();
+
 function renderSankey() {
   const eq = getYD().ertragsquellen;
   const tp = getYD().teilplaene;
