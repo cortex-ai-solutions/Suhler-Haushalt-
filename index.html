@@ -1531,7 +1531,7 @@ let _hskFilter = "alle";
 
 function initHsk() {
   const el = document.getElementById("tab-hsk");
-  if (el) el.classList.toggle("hidden", !DATA.hsk);
+  if (el) if (!DATA.hsk) el.classList.add("hidden");  // nur verstecken wenn keine Daten
 }
 
 function setHskFilter(f) {
