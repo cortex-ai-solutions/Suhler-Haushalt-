@@ -139,6 +139,7 @@
     <div class="mobile-tab-item" data-tab="zeitreihe">Zeitreihe</div>
     <div class="mobile-tab-item" data-tab="hsk">HSK &amp; Konsolidierung</div>
     <div class="mobile-tab-item" data-tab="simulator">Konsolidierungs-Simulator</div>
+    <div class="mobile-tab-item" data-tab="vermoegen">Verm&ouml;gen &amp; Beteiligungen</div>
   </div>
 </div>
 <div class="tabbar" id="tabbar">
@@ -149,6 +150,7 @@
   <div class="tab" data-tab="zeitreihe">Zeitreihe</div>
   <div class="tab" data-tab="hsk">HSK &amp; Konsolidierung</div>
   <div class="tab" data-tab="simulator">Konsolidierungs-Simulator</div>
+  <div class="tab" data-tab="vermoegen">Verm&ouml;gen</div>
 </div>
 
 <!-- ══════════ TAB: ÜBERBLICK ══════════ -->
@@ -666,6 +668,100 @@
 </div>
 
 <!-- ─── DRILL-DOWN MODAL ─────────────────────────────────────────────────── -->
+
+<!-- ══════════ TAB: VERMÖGEN & BETEILIGUNGEN ══════════ -->
+<div id="tab-vermoegen" class="hidden">
+  <div class="card p-5 mb-6">
+    <!-- Subtab-Leiste -->
+    <div style="display:flex;gap:0;margin-bottom:1.5rem;border-bottom:1px solid #334155;">
+      <button class="vermoegen-subtab" data-vtab="bilanz" onclick="_switchVTab('bilanz')"
+              style="padding:0.5rem 1.25rem;background:transparent;border:none;
+                     color:#60a5fa;border-bottom:2px solid #60a5fa;font-weight:500;cursor:pointer;font-size:0.875rem;">
+        Stadt Suhl &ndash; Bilanz
+      </button>
+      <button class="vermoegen-subtab" data-vtab="ebkds" onclick="_switchVTab('ebkds')"
+              style="padding:0.5rem 1.25rem;background:transparent;border:none;
+                     color:#94a3b8;border-bottom:2px solid transparent;cursor:pointer;font-size:0.875rem;">
+        EB KDS
+      </button>
+    </div>
+
+    <div id="vtab-bilanz">
+      <p class="text-slate-400 text-sm mb-5">
+        Gesamtverm&ouml;gen der Stadt Suhl nach kommunaler Doppik (Th&uuml;rGemHV-Doppik).
+        Stand: Jahresabschluss 31.12.2021 (letzter ver&ouml;ffentlichter Abschluss).
+      </p>
+      <div class="kpi-row mb-6">
+        <div class="kpi-card"><div class="kpi-label">Bilanzsumme 2021</div><div class="kpi-value" id="vm-bilanzsumme">-</div></div>
+        <div class="kpi-card"><div class="kpi-label">Eigenkapitalquote</div><div class="kpi-value" id="vm-ekquote">-</div></div>
+        <div class="kpi-card"><div class="kpi-label">Verbindlichkeiten 2021</div><div class="kpi-value" id="vm-vb">-</div></div>
+        <div class="kpi-card"><div class="kpi-label">Sonderposten 2021</div><div class="kpi-value" id="vm-sp">-</div></div>
+        <div class="kpi-card"><div class="kpi-label">Jahresergebnis 2021</div><div class="kpi-value" id="vm-je">-</div></div>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div class="card p-5">
+          <div class="section-title">Verm&ouml;gensstruktur (Aktiva) in Mio.&nbsp;&#8364;</div>
+          <div id="chart-bilanz-aktiva" style="height:240px"></div>
+        </div>
+        <div class="card p-5">
+          <div class="section-title">Finanzierungsstruktur (Passiva) in Mio.&nbsp;&#8364;</div>
+          <div id="chart-bilanz-passiva" style="height:240px"></div>
+        </div>
+      </div>
+      <div class="card p-5">
+        <div class="section-title">Hinweise zur kommunalen Bilanz</div>
+        <p class="text-slate-400 text-sm mt-2">
+          <strong class="text-slate-300">Sonderposten</strong> spiegeln erhaltene F&ouml;rdermittel wider
+          und werden parallel zur Abschreibung des gef&ouml;rderten Anlageverm&ouml;gens aufgel&ouml;st
+          (2021: 89,9&nbsp;Mio.&nbsp;&#8364;, davon 79,1 aus Zuwendungen).&nbsp;
+          <strong class="text-slate-300">Liquidit&auml;tskredite:</strong> 0&nbsp;&#8364; &ndash;
+          die Stadt finanziert ausschlie&szlig;lich &uuml;ber Investitionskredite (9,9&nbsp;Mio.&nbsp;&#8364;).&nbsp;
+          <strong class="text-slate-300">Quelle:</strong> Jahresabschluss der Stadt Suhl, 31.12.2021.
+        </p>
+      </div>
+    </div>
+
+    <div id="vtab-ebkds" class="hidden">
+      <p class="text-slate-400 text-sm mb-5">
+        Eigenbetrieb Kommunalwirtschaftliche Dienstleistungen Suhl (EB&nbsp;KDS) &ndash;
+        100&nbsp;% Eigentum der Stadt, zust&auml;ndig f&uuml;r Stra&szlig;en, Gr&uuml;nfl&auml;chen,
+        Abfallwirtschaft und Friedhofsverwaltung.
+        Stand: Beteiligungsbericht GJ 2024.
+      </p>
+      <div class="kpi-row mb-6">
+        <div class="kpi-card"><div class="kpi-label">Bilanzsumme 2024</div><div class="kpi-value" id="kds-bilanzsumme">-</div></div>
+        <div class="kpi-card"><div class="kpi-label">Eigenkapital 2024</div><div class="kpi-value" id="kds-ek">-</div></div>
+        <div class="kpi-card"><div class="kpi-label">Jahresverlust 2024</div><div class="kpi-value text-red-400" id="kds-je">-</div></div>
+        <div class="kpi-card"><div class="kpi-label">Mitarbeiter 2024</div><div class="kpi-value" id="kds-ma">-</div></div>
+        <div class="kpi-card"><div class="kpi-label">Zuschuss Stadt 2024</div><div class="kpi-value" id="kds-zuschuss">-</div></div>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div class="card p-5">
+          <div class="section-title">Bilanzsumme &amp; Eigenkapital (T&#8364;)</div>
+          <div id="chart-ebkds-bilanz" style="height:240px"></div>
+        </div>
+        <div class="card p-5">
+          <div class="section-title">Ertragsrechnung (T&#8364;)</div>
+          <div id="chart-ebkds-guv" style="height:240px"></div>
+        </div>
+      </div>
+      <div class="card p-5 mb-6">
+        <div class="section-title">Eigenkapitalquote 2021&ndash;2024 (%)</div>
+        <div id="chart-ebkds-ekquote" style="height:160px"></div>
+      </div>
+      <div class="card p-5">
+        <div class="section-title">Zum Eigenbetrieb KDS</div>
+        <p class="text-slate-400 text-sm mt-2">
+          Gegr&uuml;ndet 01.01.2012 &bull; Stammkapital 25.000&nbsp;&#8364; (100&nbsp;% Stadt Suhl).
+          Der j&auml;hrliche Zuschuss der Stadt betr&auml;gt ca.&nbsp;11,5&nbsp;Mio.&nbsp;&#8364; (2024)
+          f&uuml;r Leistungen, die als Daseinsvorsorge &uuml;ber Geb&uuml;hren nicht vollst&auml;ndig finanzierbar sind.
+          Der wachsende Instandsetzungsstau &ouml;ffentlicher Stra&szlig;en und Wege (2025: Budget -219&nbsp;T&#8364;
+          gg&uuml;. Vorjahr) gef&auml;hrdet langfristig die bauliche Substanz der Suhler Infrastruktur.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
 <div id="drilldown-overlay" class="hidden" onclick="if(event.target===this)closeDrillDown()">
   <div id="drilldown-card" class="card">
     <!-- Header -->
@@ -2408,8 +2504,147 @@ onSlider = function(el) {
   updateSimZoneBar(el.dataset.pnr);
 };
 
+var _vmRendered = false;
+
+function renderVermoegen() {
+  if (!DATA.bilanz) return;
+  if (_vmRendered) return;
+  _vmRendered = true;
+  var BY = DATA.bilanz.by_year;
+  var yr21 = BY['2021'] || {};
+  var yr20 = BY['2020'] || {};
+
+  function gb(list, code) {
+    if (!list) return 0;
+    for (var i = 0; i < list.length; i++) { if (list[i].code === code) return list[i].betrag; }
+    return 0;
+  }
+
+  var a21 = yr21.aktiva || [];
+  var p21 = yr21.passiva || [];
+  var a20 = yr20.aktiva || [];
+  var p20 = yr20.passiva || [];
+
+  var bilanzsumme = gb(a21, 'A1') + gb(a21, 'A2') + gb(a21, 'A3');
+  var ek  = gb(p21, 'P1');
+  var sp  = gb(p21, 'P2');
+  var vb  = gb(p21, 'P4');
+  var je  = gb(p21, 'P1.3');
+  var ekq = bilanzsumme > 0 ? (ek / bilanzsumme * 100) : 0;
+
+  setText('vm-bilanzsumme', fmtMio(bilanzsumme));
+  setText('vm-ekquote',     fmt(ekq, 1) + ' %');
+  setText('vm-vb',          fmtMio(vb));
+  setText('vm-sp',          fmtMio(sp));
+  var jeEl = document.getElementById('vm-je');
+  if (jeEl) { jeEl.textContent = fmtMio(Math.abs(je)) + (je < 0 ? ' (Verlust)' : ' (Gewinn)'); jeEl.className = 'kpi-value ' + (je < 0 ? 'text-red-400' : 'text-emerald-400'); }
+
+  var aktLabels = ['Anlagevermögen', 'Umlaufvermögen', 'RAP Aktiva'];
+  var aktCodes  = ['A1', 'A2', 'A3'];
+  var aktV20 = aktCodes.map(function(c) { return Math.round(gb(a20, c) / 1e4) / 100; });
+  var aktV21 = aktCodes.map(function(c) { return Math.round(gb(a21, c) / 1e4) / 100; });
+  Plotly.newPlot('chart-bilanz-aktiva', [
+    { name: '2020', y: aktLabels, x: aktV20, type: 'bar', orientation: 'h', marker: { color: '#475569' },
+      text: aktV20.map(function(v){ return v.toFixed(1) + ' Mio.'; }), textposition: 'auto' },
+    { name: '2021', y: aktLabels, x: aktV21, type: 'bar', orientation: 'h', marker: { color: '#3b82f6' },
+      text: aktV21.map(function(v){ return v.toFixed(1) + ' Mio.'; }), textposition: 'auto' },
+  ], Object.assign({}, DARK_LAYOUT, {
+    barmode: 'group',
+    margin: { l: 130, r: 20, t: 10, b: 40 },
+    xaxis: { gridcolor: '#334155' },
+    yaxis: { gridcolor: '#334155' },
+    legend: { orientation: 'h', y: 1.1 },
+  }), CFG);
+
+  var pasLabels = ['Eigenkapital', 'Sonderposten', 'Rückstellungen', 'Verbindlichkeiten'];
+  var pasCodes  = ['P1', 'P2', 'P3', 'P4'];
+  var pasV20 = pasCodes.map(function(c) { return Math.round(gb(p20, c) / 1e4) / 100; });
+  var pasV21 = pasCodes.map(function(c) { return Math.round(gb(p21, c) / 1e4) / 100; });
+  Plotly.newPlot('chart-bilanz-passiva', [
+    { name: '2020', y: pasLabels, x: pasV20, type: 'bar', orientation: 'h', marker: { color: '#475569' },
+      text: pasV20.map(function(v){ return v.toFixed(1) + ' Mio.'; }), textposition: 'auto' },
+    { name: '2021', y: pasLabels, x: pasV21, type: 'bar', orientation: 'h', marker: { color: '#a78bfa' },
+      text: pasV21.map(function(v){ return v.toFixed(1) + ' Mio.'; }), textposition: 'auto' },
+  ], Object.assign({}, DARK_LAYOUT, {
+    barmode: 'group',
+    margin: { l: 130, r: 20, t: 10, b: 40 },
+    xaxis: { gridcolor: '#334155' },
+    yaxis: { gridcolor: '#334155' },
+    legend: { orientation: 'h', y: 1.1 },
+  }), CFG);
+
+  if (DATA.eb_kds) _renderEbKds(DATA.eb_kds);
+}
+
+function _renderEbKds(EK) {
+  var jahre = ['2022', '2023', '2024'];
+  function gk(yr, bereich, pos) {
+    return ((EK[yr] || {})[bereich] || {})[pos] || 0;
+  }
+
+  setText('kds-bilanzsumme', fmt(gk('2024','KENNZAHLEN','vermogen_gesamt'), 0) + ' T€');
+  setText('kds-ek',          fmt(gk('2024','BILANZ_PASSIVA','eigenkapital'), 0) + ' T€');
+  setText('kds-je',          fmt(Math.abs(gk('2024','KENNZAHLEN','jahresergebnis')), 0) + ' T€');
+  setText('kds-ma',          fmt(gk('2024','KENNZAHLEN','mitarbeiter'), 0));
+  setText('kds-zuschuss',    fmt(gk('2024','KENNZAHLEN','zuschuss_stadt'), 0) + ' T€');
+
+  var bVerm = jahre.map(function(y){ return gk(y,'KENNZAHLEN','vermogen_gesamt'); });
+  var bEK   = jahre.map(function(y){ return gk(y,'BILANZ_PASSIVA','eigenkapital'); });
+  var bVB   = jahre.map(function(y){ return gk(y,'BILANZ_PASSIVA','verbindlichkeiten'); });
+  Plotly.newPlot('chart-ebkds-bilanz', [
+    { name: 'Bilanzsumme',   x: jahre, y: bVerm, type: 'bar', marker: { color: '#3b82f6' } },
+    { name: 'Eigenkapital',  x: jahre, y: bEK,   type: 'bar', marker: { color: '#10b981' } },
+    { name: 'Verbindlichk.', x: jahre, y: bVB,   type: 'bar', marker: { color: '#ef4444' } },
+  ], Object.assign({}, DARK_LAYOUT, {
+    barmode: 'group',
+    margin: { l: 50, r: 10, t: 10, b: 40 },
+    yaxis: { title: 'T€', gridcolor: '#334155' },
+    xaxis: { gridcolor: '#334155' },
+    legend: { orientation: 'h', y: 1.1 },
+  }), CFG);
+
+  var gUmsatz = jahre.map(function(y){ return gk(y,'GUV','umsatzerloese'); });
+  var gMat    = jahre.map(function(y){ return Math.abs(gk(y,'GUV','materialaufwand')); });
+  var gPers   = jahre.map(function(y){ return Math.abs(gk(y,'GUV','personalaufwand')); });
+  Plotly.newPlot('chart-ebkds-guv', [
+    { name: 'Umsatzerlöse',    x: jahre, y: gUmsatz, type: 'bar', marker: { color: '#3b82f6' } },
+    { name: 'Materialaufwand', x: jahre, y: gMat,    type: 'bar', marker: { color: '#f59e0b' } },
+    { name: 'Personalaufwand', x: jahre, y: gPers,   type: 'bar', marker: { color: '#8b5cf6' } },
+  ], Object.assign({}, DARK_LAYOUT, {
+    barmode: 'group',
+    margin: { l: 50, r: 10, t: 10, b: 40 },
+    yaxis: { title: 'T€', gridcolor: '#334155' },
+    xaxis: { gridcolor: '#334155' },
+    legend: { orientation: 'h', y: 1.1 },
+  }), CFG);
+
+  var alleJahre = ['2021', '2022', '2023', '2024'];
+  var ekq = alleJahre.map(function(y){ return gk(y,'KENNZAHLEN','ek_quote_pct') || null; });
+  Plotly.newPlot('chart-ebkds-ekquote', [
+    { x: alleJahre, y: ekq, type: 'scatter', mode: 'lines+markers',
+      line: { color: '#10b981', width: 2 }, marker: { color: '#10b981', size: 8 },
+      name: 'EK-Quote %' },
+  ], Object.assign({}, DARK_LAYOUT, {
+    margin: { l: 50, r: 10, t: 10, b: 40 },
+    yaxis: { title: '%', gridcolor: '#334155', rangemode: 'tozero' },
+    xaxis: { gridcolor: '#334155' },
+  }), CFG);
+}
+
+function _switchVTab(name) {
+  document.querySelectorAll('.vermoegen-subtab').forEach(function(b) {
+    var active = b.getAttribute('data-vtab') === name;
+    b.style.color = active ? '#60a5fa' : '#94a3b8';
+    b.style.borderBottom = active ? '2px solid #60a5fa' : '2px solid transparent';
+  });
+  var bil = document.getElementById('vtab-bilanz');
+  var kds = document.getElementById('vtab-ebkds');
+  if (bil) bil.classList.toggle('hidden', name !== 'bilanz');
+  if (kds) kds.classList.toggle('hidden', name !== 'ebkds');
+}
+
 function setupTabs() {
-  const TABS = ["overview", "details", "personal", "jahresvergleich", "zeitreihe", "hsk", "simulator"];
+  const TABS = ["overview", "details", "personal", "jahresvergleich", "zeitreihe", "hsk", "simulator", "vermoegen"];
   document.querySelectorAll("#tabbar .tab").forEach(tab => {
     tab.addEventListener("click", () => {
       document.querySelectorAll("#tabbar .tab").forEach(t => t.classList.remove("active"));
@@ -2418,6 +2653,7 @@ function setupTabs() {
       TABS.forEach(t => document.getElementById("tab-" + t).classList.toggle("hidden", name !== t));
       if (name === "zeitreihe") renderZeitreihe();
       if (name === "hsk") renderHsk();
+      if (name === "vermoegen") renderVermoegen();
       if (name === "details") renderDetailProdukte();
       if (name === "personal") renderPersonal();
       if (name === "jahresvergleich") {

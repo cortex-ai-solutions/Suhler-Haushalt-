@@ -837,6 +837,10 @@ def main():
     # ── HSK-Maßnahmen ─────────────────────────────────────────────────────────
     result["hsk"] = make_hsk(con)
 
+    # ── Bilanz + EB KDS ───────────────────────────────────────────────────────
+    result["bilanz"] = make_bilanz(con)
+    result["eb_kds"] = make_eb_kds(con)
+
     # ── Ausgabe ───────────────────────────────────────────────────────────────
     with open(OUT_PATH, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, separators=(",", ":"))
@@ -1002,6 +1006,58 @@ def make_hsk(con) -> dict:
         "kumulativ_timeline": kumulativ_timeline,
         "massnahmen": massnahmen,
     }
+
+
+def make_bilanz(con) -> dict | None:
+    """Exportiert Bilanz-Positionen (Stadt Suhl) für den Vermögen-Tab."""
+    try:
+        count = con.execute("SELECT COUNT(*) FROM bilanz_positionen").fetchone()[0]
+    except Exception:
+        return None
+    if count == 0:
+        return None
+
+    jahre = sorted({r[0] for r in con.execute(
+        "SELECT DISTINCT daten_jahr FROM bilanz_positionen")})
+    by_year = {}
+    for yr in jahre:
+        aktiva, passiva = [], []
+        for r in con.execute("""
+            SELECT position_code, bezeichnung, ebene, betrag, seite
+            FROM bilanz_positionen WHERE daten_jahr = ?
+            ORDER BY seite, position_code
+        """, (yr,)):
+            entry = {"code": r["position_code"], "bez": r["bezeichnung"],
+                     "ebene": r["ebene"], "betrag": round(r["betrag"], 2)}
+            (aktiva if r["seite"] == "AKTIVA" else passiva).append(entry)
+        by_year[str(yr)] = {"aktiva": aktiva, "passiva": passiva}
+
+    return {"jahre": jahre, "by_year": by_year}
+
+
+def make_eb_kds(con) -> dict | None:
+    """Exportiert EB-KDS-Kennzahlen (Beteiligungsbericht) für den Vermögen-Tab."""
+    try:
+        count = con.execute("SELECT COUNT(*) FROM eb_kds_kennzahlen").fetchone()[0]
+    except Exception:
+        return None
+    if count == 0:
+        return None
+
+    result: dict = {}
+    for r in con.execute("""
+        SELECT daten_jahr, bereich, position, betrag_teur
+        FROM eb_kds_kennzahlen ORDER BY daten_jahr, bereich, position
+    """):
+        yr = str(r["daten_jahr"])
+        b  = r["bereich"]
+        if yr not in result:
+            result[yr] = {}
+        if b not in result[yr]:
+            result[yr][b] = {}
+        result[yr][b][r["position"]] = r["betrag_teur"]
+
+    return result or None
 
 
 if __name__ == "__main__":
