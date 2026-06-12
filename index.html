@@ -38,6 +38,15 @@
   .tab { padding: 0.5rem 1rem; cursor: pointer; border-bottom: 2px solid transparent; color: #94a3b8; font-size: 0.875rem; }
   .tab.active { border-bottom-color: #60a5fa; color: #e2e8f0; }
   .note { font-size: 0.75rem; color: #64748b; }
+  @media (max-width: 767px) { .tabbar { display: none !important; } }
+  #mobile-nav { position: relative; margin-bottom: 1rem; }
+  #mobile-nav-btn { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 0.6rem 1rem; background: #1e293b; border: 1px solid #334155; border-radius: 0.5rem; color: #e2e8f0; font-size: 0.875rem; cursor: pointer; }
+  #mobile-nav-btn:hover { background: #273549; }
+  #mobile-nav-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: #1e293b; border: 1px solid #334155; border-radius: 0.5rem; z-index: 50; overflow: hidden; box-shadow: 0 4px 16px #0008; }
+  .mobile-tab-item { padding: 0.65rem 1rem; color: #94a3b8; font-size: 0.875rem; cursor: pointer; }
+  .mobile-tab-item:hover { background: #273549; color: #e2e8f0; }
+  .mobile-tab-item.active { background: #1e3a5f; color: #60a5fa; font-weight: 500; }
+
 </style>
 </head>
 <body class="min-h-screen p-4 md:p-8">
@@ -114,6 +123,22 @@
       <div class="kpi-value text-amber-400" id="kpi-finanzsaldo">&ndash;</div>
       <div class="note mt-1">Einzahlungen &ndash; Auszahlungen</div>
     </div>
+  </div>
+</div>
+<!-- Mobile Navigation -->
+<div class="md:hidden" id="mobile-nav">
+  <button type="button" id="mobile-nav-btn" onclick="_mobileNavToggle()">
+    <span id="mobile-nav-label">Überblick</span>
+    <span>&#9660;</span>
+  </button>
+  <div id="mobile-nav-dropdown" class="hidden">
+    <div class="mobile-tab-item active" data-tab="overview">Überblick</div>
+    <div class="mobile-tab-item" data-tab="details">Details</div>
+    <div class="mobile-tab-item" data-tab="personal">Personal</div>
+    <div class="mobile-tab-item" data-tab="jahresvergleich">Jahresvergleich</div>
+    <div class="mobile-tab-item" data-tab="zeitreihe">Zeitreihe</div>
+    <div class="mobile-tab-item" data-tab="hsk">HSK &amp; Konsolidierung</div>
+    <div class="mobile-tab-item" data-tab="simulator">Konsolidierungs-Simulator</div>
   </div>
 </div>
 <div class="tabbar" id="tabbar">
@@ -903,6 +928,40 @@ function renderKPI() {
     var sp = SP.by_year[yr + "_PLAN_ANSATZ"] || SP.by_year["2025_PLAN_ANSATZ"];
     renderSpTpDetail(sp, yr);
   };
+})();
+
+// ── Mobile Navigation Hamburger-Dropdown ───────────────────────────────
+(function() {
+  window._mobileNavToggle = function() {
+    var dd = document.getElementById("mobile-nav-dropdown");
+    if (dd) dd.classList.toggle("hidden");
+  };
+
+  document.addEventListener("click", function(e) {
+    var nav = document.getElementById("mobile-nav");
+    if (nav && !nav.contains(e.target)) {
+      var dd = document.getElementById("mobile-nav-dropdown");
+      if (dd) dd.classList.add("hidden");
+    }
+  });
+
+  document.querySelectorAll(".mobile-tab-item").forEach(function(item) {
+    item.addEventListener("click", function() {
+      var tabName = item.getAttribute("data-tab");
+      document.querySelectorAll(".mobile-tab-item").forEach(function(i) {
+        i.classList.remove("active");
+      });
+      item.classList.add("active");
+      var label = document.getElementById("mobile-nav-label");
+      if (label) label.textContent = item.textContent;
+      var dd = document.getElementById("mobile-nav-dropdown");
+      if (dd) dd.classList.add("hidden");
+      var desktopTab = document.querySelector(
+        '#tabbar .tab[data-tab="' + tabName + '"]'
+      );
+      if (desktopTab) desktopTab.click();
+    });
+  });
 })();
 
 function renderSankey() {
