@@ -138,6 +138,18 @@ STELLENPLAN_KEYWORDS = [
     "anzahl stellen", "anzahl mitarbeiter", "anzahl beschäftigte",
 ]
 
+# HSK-Keywords (Haushaltssicherungskonzept)
+HSK_KEYWORDS = [
+    "hsk",
+    "haushaltssicherung",
+    "konsolidierungsmaßnahme",
+    "konsolidierungsmassnahme",
+    "sparmaßnahme",
+    "sparmassnahme",
+    "wie viel hat suhl gespart",
+    "wieviel hat suhl gespart",
+]
+
 
 # ── DB-Zugriff ────────────────────────────────────────────────────────────────
 
@@ -224,6 +236,14 @@ def has_stellenplan_tables(con):
         return False
 
 
+def has_hsk_tables(con):
+    try:
+        con.execute("SELECT 1 FROM hsk_massnahmen LIMIT 1")
+        return True
+    except Exception:
+        return False
+
+
 def get_stellenplan_years(con):
     rows = con.execute(
         "SELECT DISTINCT daten_jahr FROM stellenplan ORDER BY daten_jahr"
@@ -288,6 +308,11 @@ def detect_comparison(text):
 def detect_stellenplan(text):
     t = text.lower()
     return any(kw in t for kw in STELLENPLAN_KEYWORDS)
+
+
+def detect_hsk(text):
+    t = text.lower()
+    return any(kw in t for kw in HSK_KEYWORDS)
 
 
 # ── Query-Funktionen ──────────────────────────────────────────────────────────
@@ -480,6 +505,99 @@ def query_stellenplan(con, year, wert_typ="PLAN_ANSATZ", tp_nrs=None):
         "nach_gruppe": [dict(r) for r in rows_gruppe],
         "nach_tp":     [dict(r) for r in rows_tp],
     }
+
+
+def query_hsk_uebersicht(con):
+    """Gesamtstatistik des HSK (Übersicht)."""
+    stats = con.execute("""
+        SELECT
+            COUNT(*)                                                      AS gesamt,
+            SUM(CASE WHEN umsetzungsstatus='aktiv'     THEN 1 ELSE 0 END) AS aktiv,
+            SUM(CASE WHEN umsetzungsstatus='erledigt'  THEN 1 ELSE 0 END) AS erledigt,
+            SUM(CASE WHEN umsetzungsstatus='entfallen' THEN 1 ELSE 0 END) AS entfallen,
+            SUM(betrag_kumulativ) AS kumulativ,
+            SUM(betrag_2024)      AS plan_2024,
+            SUM(betrag_2025)      AS plan_2025,
+            SUM(betrag_gesamt)    AS zielgesamt
+        FROM hsk_massnahmen
+    """).fetchone()
+
+    by_kat = con.execute("""
+        SELECT kategorie,
+               COUNT(*)              AS n,
+               SUM(betrag_kumulativ) AS kumulativ,
+               SUM(betrag_2024)      AS plan_2024,
+               SUM(betrag_2025)      AS plan_2025
+        FROM hsk_massnahmen
+        WHERE umsetzungsstatus = 'aktiv'
+        GROUP BY kategorie
+        ORDER BY kumulativ DESC
+    """).fetchall()
+
+    by_tp = con.execute("""
+        SELECT t.nummer AS tp_nr, t.bezeichnung AS tp_name,
+               COUNT(DISTINCT mp.massnahme_id) AS n,
+               SUM(m.betrag_kumulativ) AS kumulativ,
+               SUM(m.betrag_2025)      AS plan_2025
+        FROM hsk_massnahmen_produkte mp
+        JOIN produkte p  ON mp.produkt_nummer = p.produkt_nummer
+        JOIN teilplaene t ON p.teilplan_id = t.id
+        JOIN hsk_massnahmen m ON mp.massnahme_id = m.id
+        WHERE m.umsetzungsstatus = 'aktiv'
+        GROUP BY t.nummer
+        ORDER BY t.nummer
+    """).fetchall()
+
+    return {
+        "stats":        dict(stats),
+        "by_kategorie": [dict(r) for r in by_kat],
+        "by_tp":        [dict(r) for r in by_tp],
+    }
+
+
+def query_hsk_massnahmen(con, suchbegriff=None, tp_nrs=None, kategorie=None, status=None, limit=30):
+    """HSK-Maßnahmen suchen und auflisten."""
+    where_parts = []
+    params = []
+
+    if status:
+        where_parts.append("m.umsetzungsstatus = ?")
+        params.append(status)
+
+    if kategorie:
+        where_parts.append("m.kategorie = ?")
+        params.append(kategorie)
+
+    if suchbegriff:
+        where_parts.append(
+            "(LOWER(m.bezeichnung) LIKE ? OR LOWER(m.beschreibung) LIKE ? OR LOWER(m.produkte) LIKE ?)"
+        )
+        s = f"%{suchbegriff.lower()}%"
+        params.extend([s, s, s])
+
+    if tp_nrs:
+        ph = ",".join("?" * len(tp_nrs))
+        where_parts.append(f"""m.id IN (
+            SELECT DISTINCT mp.massnahme_id FROM hsk_massnahmen_produkte mp
+            JOIN produkte p  ON mp.produkt_nummer = p.produkt_nummer
+            JOIN teilplaene t ON p.teilplan_id = t.id
+            WHERE t.nummer IN ({ph})
+        )""")
+        params.extend(tp_nrs)
+
+    where = ("WHERE " + " AND ".join(where_parts)) if where_parts else ""
+
+    rows = con.execute(f"""
+        SELECT m.nr, m.bezeichnung, m.umsetzungsstatus, m.kategorie,
+               m.betrag_kumulativ, m.betrag_2024, m.betrag_2025,
+               m.betrag_gesamt, m.beschreibung, m.verantwortlich
+        FROM hsk_massnahmen m
+        {where}
+        ORDER BY m.nr
+        LIMIT ?
+    """, (*params, limit)).fetchall()
+
+    return [dict(r) for r in rows]
 
 
 # ── Output-Formatter ──────────────────────────────────────────────────────────
@@ -768,6 +886,102 @@ def format_stellenplan_vergleich(data_a, data_b, query_text):
     return "\n".join(lines)
 
 
+def format_hsk_uebersicht(data, query_text):
+    s = data["stats"]
+    lines = [
+        f"Anfrage: {query_text}", "",
+        "Haushaltssicherungskonzept (HSK) — Stadt Suhl",
+        "9. Fortschreibung, Beschluss 2023-09-07",
+        _hr(), "",
+        f"  Massnahmen gesamt:  {s['gesamt']:>4}",
+        f"    aktiv:            {int(s['aktiv'] or 0):>4}",
+        f"    erledigt:         {int(s['erledigt'] or 0):>4}",
+        f"    entfallen:        {int(s['entfallen'] or 0):>4}",
+        "",
+        "  Konsolidierungseffekte:",
+        f"    Kumuliert 2013-2022:  {fmt_eur(s['kumulativ']):>22}",
+        f"    Plan 2024:           {fmt_eur(s['plan_2024']):>22}",
+        f"    Plan 2025:           {fmt_eur(s['plan_2025']):>22}",
+        f"    Gesamtziel 2013-25:  {fmt_eur(s['zielgesamt']):>22}",
+        "",
+        "  Aktive Massnahmen je Kategorie:",
+        f"  {'Kategorie':<12} {'Anz.':>5} {'Kumuliert 2013-22':>20} {'Plan 2025':>16}",
+        f"  {'─'*57}",
+    ]
+    for r in data["by_kategorie"]:
+        lines.append(
+            f"  {r['kategorie']:<12} {r['n']:>5} "
+            f"{fmt_eur(r['kumulativ']):>20} {fmt_eur(r['plan_2025']):>16}"
+        )
+    lines += [
+        "",
+        "  Einsparungen nach Teilplan (aktive Massnahmen mit Produktzuordnung):",
+        f"  {'TP':<5} {'Bezeichnung':<36} {'Anz.':>4} {'Kumuliert':>18} {'Plan 2025':>14}",
+        f"  {'─'*81}",
+    ]
+    for r in data["by_tp"]:
+        lines.append(
+            f"  {r['tp_nr']:<5} {r['tp_name']:<36} {r['n']:>4} "
+            f"{fmt_eur(r['kumulativ']):>18} {fmt_eur(r['plan_2025']):>14}"
+        )
+    lines += [
+        "",
+        "  Hinweis: 17 Massnahmen ohne Produktzuordnung (uebergreifend) nicht enthalten.",
+        "  Weitere Details: 'HSK Massnahmen [Bereich]' oder 'HSK Massnahmen aktiv'",
+    ]
+    return "\n".join(lines)
+
+
+def format_hsk_massnahmen(massnahmen, query_text, tp_nrs=None, status_filter=None, kat_filter=None):
+    filter_parts = []
+    if tp_nrs:
+        filter_parts.append("TP " + "/".join(tp_nrs))
+    if status_filter:
+        filter_parts.append(status_filter)
+    if kat_filter:
+        filter_parts.append(kat_filter)
+    filter_str = ", ".join(filter_parts) if filter_parts else "alle"
+
+    lines = [
+        f"Anfrage: {query_text}", "",
+        f"HSK-Massnahmen — {filter_str} ({len(massnahmen)} Treffer)",
+        _hr(), "",
+    ]
+
+    if not massnahmen:
+        lines.append("  Keine Massnahmen gefunden.")
+        return "\n".join(lines)
+
+    lines += [
+        f"  {'Nr':<6} {'Bezeichnung':<36} {'Status':<10} {'Kum. 13-22':>16} {'Plan 2025':>12}",
+        f"  {'─'*84}",
+    ]
+    for m in massnahmen:
+        name = m["bezeichnung"]
+        if len(name) > 35:
+            name = name[:34] + "…"
+        lines.append(
+            f"  {m['nr']:<6} {name:<36} {m['umsetzungsstatus']:<10} "
+            f"{fmt_eur(m['betrag_kumulativ']):>16} {fmt_eur(m['betrag_2025']):>12}"
+        )
+
+    total_kum = sum(m["betrag_kumulativ"] or 0 for m in massnahmen)
+    total_25  = sum(m["betrag_2025"] or 0 for m in massnahmen)
+    lines += [
+        f"  {'─'*84}",
+        f"  {'SUMME':<6} {'':<36} {'':<10} {fmt_eur(total_kum):>16} {fmt_eur(total_25):>12}",
+    ]
+
+    if len(massnahmen) == 1:
+        m = massnahmen[0]
+        if m.get("beschreibung"):
+            lines += ["", f"  Beschreibung: {m['beschreibung'][:400]}"]
+        if m.get("verantwortlich"):
+            lines.append(f"  Verantwortlich: {m['verantwortlich']}")
+
+    return "\n".join(lines)
+
+
 def format_verfuegbare_jahre(con, query_text):
     years = get_available_years(con)
     lines = [f'Anfrage: {query_text}', "", "Verfuegbare Haushaltsdaten — Stadt Suhl", _hr(), ""]
@@ -806,6 +1020,14 @@ Stellenplan (Personalstellen / Headcount):
   "Stellenplan 2024 vs 2025"
   "Wie viele Stellen hat die Feuerwehr?"
   "Besoldungsgruppen Beamte 2025"
+
+Haushaltssicherungskonzept (HSK):
+  "HSK Übersicht"
+  "Wie viel hat Suhl durch das HSK gespart?"
+  "Welche HSK-Maßnahmen gibt es fuer Soziales?"
+  "HSK Massnahmen aktiv"
+  "HSK Massnahmen Aufwand"
+  "HSK Massnahmen Kultur"
 """.format(q=query_text)
 
 
@@ -829,6 +1051,40 @@ def dispatch(query_text, json_mode, con):
     is_comparison = detect_comparison(query_text)
     sk_code = detect_sk(query_text)
     kk = detect_kk(query_text)
+
+    # HSK — Haushaltssicherungskonzept
+    if detect_hsk(query_text) and has_hsk_tables(con):
+        t_lower = query_text.lower()
+
+        # Sub-Intent: Massnahmen-Liste vs. Gesamtübersicht
+        list_words = ("massnahme", "maßnahme", "zeig", "liste", "welche",
+                      "aufzählung", "aufzaehlung")
+        is_list = tp_nrs or any(w in t_lower for w in list_words)
+
+        if is_list:
+            status_filter = None
+            if "aktiv" in t_lower:
+                status_filter = "aktiv"
+            elif "entfallen" in t_lower:
+                status_filter = "entfallen"
+            elif "erledigt" in t_lower:
+                status_filter = "erledigt"
+
+            kat_filter = None
+            if "personal" in t_lower:
+                kat_filter = "PERSONAL"
+            elif any(w in t_lower for w in ("ertrag", "einnahme", "steuer")):
+                kat_filter = "ERTRAG"
+            elif any(w in t_lower for w in ("aufwand", "ausgabe", "kosten")):
+                kat_filter = "AUFWAND"
+
+            massnahmen = query_hsk_massnahmen(con, None, tp_nrs or None, kat_filter, status_filter)
+            text = format_hsk_massnahmen(massnahmen, query_text, tp_nrs or None, status_filter, kat_filter)
+        else:
+            data = query_hsk_uebersicht(con)
+            text = format_hsk_uebersicht(data, query_text)
+
+        return {"type": "hsk", "text": text}, None
 
     # Stellenplan (Headcount) — VOR Jahresvergleich, damit "Stellenplan 2024 vs 2025"
     # nicht in den allgemeinen Finanz-Vergleich fällt
