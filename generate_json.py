@@ -841,6 +841,9 @@ def main():
     result["bilanz"] = make_bilanz(con)
     result["eb_kds"] = make_eb_kds(con)
 
+    # ── Beteiligungen ─────────────────────────────────────────────────────────
+    result["beteiligungen"] = make_beteiligungen(con)
+
     # ── Ausgabe ───────────────────────────────────────────────────────────────
     with open(OUT_PATH, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, separators=(",", ":"))
@@ -858,6 +861,8 @@ def main():
         ("Personal-Gruppen",   len(result["personal"]["gruppen_labels"])),
         ("Stellenplan-Keys",   len(result["personal"].get("stellenplan", {}).get("by_year", {}))),
         ("HSK-Massnahmen",     len(result.get("hsk", {}).get("massnahmen", []))),
+        ("Beteiligungen",      len((result.get("beteiligungen") or {}).get("entities", []))),
+        ("Finanzstroeme 2024", len((result.get("beteiligungen") or {}).get("stroeme", {}).get("2024", []))),
     ]:
         print(f"     {k+':':25s} {v}")
     for yr in [2023, 2024, 2025]:
@@ -1089,6 +1094,90 @@ def make_eb_kds(con) -> dict | None:
         result[yr][b][r["position"]] = r["betrag_teur"]
 
     return result or None
+
+
+def make_beteiligungen(con) -> dict | None:
+    """Exportiert Beteiligungen + Kennzahlen + Finanzströme für den Beteiligungen-Subtab."""
+    try:
+        count = con.execute("SELECT COUNT(*) FROM beteiligungen").fetchone()[0]
+    except Exception:
+        return None
+    if count == 0:
+        return None
+
+    # Stammdaten
+    entities = []
+    for r in con.execute("""
+        SELECT id, kuerzel, name, typ, beteiligung_direkt, beteiligung_indirekt,
+               via_kuerzel, stammkapital_eur, gruendungsjahr, sektor, status,
+               oeffentlicher_zweck
+        FROM beteiligungen ORDER BY id
+    """):
+        entities.append({
+            "id":                  r["id"],
+            "kuerzel":             r["kuerzel"],
+            "name":                r["name"],
+            "typ":                 r["typ"],
+            "beteiligung_direkt":  r["beteiligung_direkt"],
+            "beteiligung_indirekt": r["beteiligung_indirekt"],
+            "via":                 r["via_kuerzel"],
+            "stammkapital_eur":    r["stammkapital_eur"],
+            "gruendungsjahr":      r["gruendungsjahr"],
+            "sektor":              r["sektor"],
+            "status":              r["status"],
+            "zweck":               r["oeffentlicher_zweck"],
+        })
+
+    # Kennzahlen je Beteiligung × Jahr
+    kennzahlen: dict[str, dict[str, dict]] = {}
+    for r in con.execute("""
+        SELECT b.kuerzel, bk.jahr,
+               bk.umsatz_teur, bk.jahresergebnis_teur, bk.jahresergebnis_nach_eav_teur,
+               bk.bilanzsumme_teur, bk.eigenkapital_teur, bk.verbindlichkeiten_teur,
+               bk.investitionen_teur, bk.mitarbeiter
+        FROM beteiligungen_kennzahlen bk
+        JOIN beteiligungen b ON bk.beteiligung_id = b.id
+        ORDER BY b.kuerzel, bk.jahr
+    """):
+        kuerzel = r["kuerzel"]
+        if kuerzel not in kennzahlen:
+            kennzahlen[kuerzel] = {}
+        ek = r["eigenkapital_teur"]
+        bs = r["bilanzsumme_teur"]
+        kennzahlen[kuerzel][str(r["jahr"])] = {
+            "umsatz":     r["umsatz_teur"],
+            "je":         r["jahresergebnis_teur"],
+            "je_eav":     r["jahresergebnis_nach_eav_teur"],
+            "bilanzsumme": bs,
+            "eigenkapital": ek,
+            "verbindlichkeiten": r["verbindlichkeiten_teur"],
+            "investitionen": r["investitionen_teur"],
+            "mitarbeiter":  r["mitarbeiter"],
+            "ek_quote":     round(ek / bs * 100, 1) if bs and bs > 0 else None,
+        }
+
+    # Finanzströme je Jahr
+    stroeme: dict[str, list] = {}
+    for r in con.execute("""
+        SELECT jahr, von_kuerzel, nach_kuerzel, betrag_teur, typ, bezeichnung
+        FROM finanzstroeme ORDER BY jahr, typ, betrag_teur DESC
+    """):
+        yr = str(r["jahr"])
+        if yr not in stroeme:
+            stroeme[yr] = []
+        stroeme[yr].append({
+            "von":      r["von_kuerzel"],
+            "nach":     r["nach_kuerzel"],
+            "betrag":   r["betrag_teur"],
+            "typ":      r["typ"],
+            "bez":      r["bezeichnung"],
+        })
+
+    return {
+        "entities":   entities,
+        "kennzahlen": kennzahlen,
+        "stroeme":    stroeme,
+    }
 
 
 if __name__ == "__main__":

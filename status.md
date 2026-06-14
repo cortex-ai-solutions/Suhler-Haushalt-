@@ -4,7 +4,7 @@
 ## Meta
 id: haushalt-suhl
 status: dev
-lastUpdate: 2026-06-13
+lastUpdate: 2026-06-14
 monthlyRevenue: 0
 monthlyRunningCost: 0
 
@@ -23,7 +23,8 @@ monthlyRunningCost: 0
 - [x] Evidenzbasis-Infothek: 4 Quellen mit pdfminer extrahiert + Detail-Toggle
 - [x] FINANZPLANUNG-Bug behoben + Finanzplan-KPIs im Überblick-Tab
 - [x] HSK-Tab-Sichtbarkeits-Bug + Personal-TP-Accordion + Mobile-Navigation
-- [x] Vermögen-Tab (8. Tab): Bilanz 2020/2021 + EB KDS 2022-2024 mit Charts
+- [x] Vermögen-Tab (8. Tab): Bilanz 2020/2021 + EB KDS 2022-2024 mit Charts + Level-3-Detail
+- [x] Beteiligungen-Subtab: 15 Gesellschaften, Sankey Finanzströme 2024, Kennzahlen-Tabelle, JÜ-Chart
 
 ## Offene Punkte
 🟡 [Mittel] Stellenplan 2023: Benötigt HH-Plan 2024 PDF (Seiten 893–898)
@@ -40,8 +41,9 @@ HSK-Maßnahmen: 78 (43 aktiv, 4 erledigt, 31 entfallen)
 HSK-Kumuliert 2013–2022: 40,0 Mio €
 Jahresergebnis 2025 (Soll): −1.607.940 €
 Finanzierungssaldo 2025 (Soll): +563.350 € (Einz. 136,4 Mio − Ausz. 135,8 Mio)
-Bilanzsumme 2021 (Stadt): 279,5 Mio € (EK-Quote 53,9 %, Verbindlichkeiten 16,6 Mio €)
+Bilanzsumme 2021 (Stadt): 279.459 T€ = 279,5 Mio € (EK-Quote 53,9 %, VB 16,6 Mio €, Entwicklung seit 2013: +38.365 T€)
 EB KDS Bilanzsumme 2024: 5,59 Mio € (EK 690 T€, Jahresverlust −409 T€, 110 MA)
+Beteiligungen: 15 Gesellschaften (14 direkt/mittelbar + EB KDS); SWSZ-Umsatz 59 Mio € (2024); EAV-Kette → CCS 4.052 T€; SNG-Defizit 2.852 T€ quersubventioniert
 
 ## Notizen
-Live unter https://cortex-ai-solutions.github.io/Suhler-Haushalt-/ — Dashboard mit 8 Tabs + mobiler Hamburger-Navigation. Orsi-Skill budget_query.py auf Elestio unterstützt Haushalt + Stellenplan + HSK. Vermögen-Tab neu: Bilanz der Stadt Suhl (2020+2021, aus Jahresabschluss 31.12.2021) + EB KDS Kennzahlen (2021–2024, aus Beteiligungsbericht 2024). Evidenzbasis-Infothek live: 4 Quellen (HzE, KdU Erfurt, dena Straßenbeleuchtung, Brandschutz TLVwA). Kritische Constraints: CRLF in index.html, kein Unicode in JS-Strings, Monkey-Patching für Template-Literal-Sicherheit. Server: ssp-framework-2-u68900.vm.elestio.app, DB: /opt/omni-haushalt/suhl_haushalt.db
+Live unter https://cortex-ai-solutions.github.io/Suhler-Haushalt-/ — Dashboard mit 8 Tabs + mobiler Hamburger-Navigation. Orsi-Skill budget_query.py auf Elestio unterstützt Haushalt + Stellenplan + HSK. Vermögen-Tab: Bilanz mit Level-3-Detail (160 Positionen: Sachanlagen 10 Kategorien, Finanzanlage 8, Forderungen 7, VB 11) + Bilanzentwicklung seit 2013. EB KDS Kennzahlen (2021–2024). Evidenzbasis-Infothek live: 4 Quellen. Kritische Constraints: CRLF in index.html, kein Unicode in JS-Strings, Monkey-Patching für Template-Literal-Sicherheit. Server: ssp-framework-2-u68900.vm.elestio.app, DB: /opt/omni-haushalt/suhl_haushalt.db
