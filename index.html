@@ -774,6 +774,12 @@
         <div id="bilanz-entwicklung-body" class="text-sm mt-2"></div>
       </div>
       </div>
+      <div class="card p-5 mt-4">
+        <div class="section-title">Schuldenentwicklung 2013&#8211;2026</div>
+        <p class="text-slate-400 text-xs mb-3">Investitionskredite per 31.12. in T&#8364;&nbsp;&mdash; Quelle: HH-Plan 2025 S.&nbsp;83. Keine Neuverschuldung seit 2013.</p>
+        <div class="kpi-row mb-4" id="schulden-kpi-row"></div>
+        <div id="chart-schulden" style="height:300px"></div>
+      </div>
     </div>
 
     <div id="vtab-ebkds" class="hidden">
@@ -3203,6 +3209,95 @@ function _renderInvestitionen() {
     _renderInvestitionen();
   };
 })();
+// — Schuldenentwicklung 2013-2026 —
+function _renderSchulden() {
+  var el = document.getElementById('chart-schulden');
+  var kpiEl = document.getElementById('schulden-kpi-row');
+  if (!el || !kpiEl || !DATA.schulden || !DATA.schulden.length) return;
+  var S = DATA.schulden;
+
+  // KPI-Werte ermitteln
+  var s2013 = S[0].schuldenstand_teur;
+  var s2025 = 0, pk2025 = 0;
+  for (var i = 0; i < S.length; i++) {
+    if (S[i].jahr === 2025) { s2025 = S[i].schuldenstand_teur; pk2025 = S[i].prokopf_eur; }
+  }
+  var abbau = Math.round(s2013 - s2025);
+  var abbauPct = s2013 > 0 ? Math.round(abbau / s2013 * 100) : 0;
+
+  // KPI-Chips rendern
+  function fmtT(n) { return n.toLocaleString('de-DE') + ' T' + '\u20ac'; }
+  var kpiData = [
+    { label: 'Schuldenstand 2025 (Plan)', val: fmtT(s2025), color: '#10b981' },
+    { label: 'Pro-Kopf-Verschuldung 2025', val: pk2025.toLocaleString('de-DE') + ' ' + '\u20ac' + '/EW', color: '#3b82f6' },
+    { label: 'Schuldenabbau seit 2013', val: '\u2212' + fmtT(abbau) + ' (' + '\u2212' + abbauPct + '%)', color: '#059669' },
+  ];
+  kpiEl.innerHTML = kpiData.map(function(c) {
+    return '<div class="kpi-card" style="border-top:3px solid ' + c.color + '">'  
+      + '<div class="kpi-label">' + c.label + '</div>'
+      + '<div class="kpi-value">' + c.val + '</div></div>';
+  }).join('');
+
+  // Chart
+  var years  = S.map(function(r) { return r.jahr; });
+  var stands = S.map(function(r) { return r.schuldenstand_teur; });
+  var prokpf = S.map(function(r) { return r.prokopf_eur; });
+  var colors = S.map(function(r) {
+    return r.ist_prognose ? 'rgba(59,130,246,0.35)' : '#1e40af';
+  });
+
+  var traces = [
+    {
+      type: 'bar', name: 'Schuldenstand T' + '\u20ac',
+      x: years, y: stands,
+      marker: { color: colors },
+      yaxis: 'y',
+    },
+    {
+      type: 'scatter', mode: 'lines+markers',
+      name: 'Pro-Kopf ' + '\u20ac' + '/EW',
+      x: years, y: prokpf,
+      line:   { color: '#f97316', width: 2 },
+      marker: { color: '#f97316', size: 6 },
+      yaxis: 'y2',
+    },
+  ];
+
+  var layout = Object.assign({}, DARK_LAYOUT, {
+    height: 280,
+    margin: { t: 10, b: 40, l: 55, r: 60 },
+    bargap: 0.25,
+    yaxis: {
+      title: { text: 'T' + '\u20ac', font: { size: 11 } },
+      gridcolor: '#334155',
+      tickfont: { size: 10 },
+    },
+    yaxis2: {
+      title: { text: '\u20ac' + '/EW', font: { size: 11 } },
+      overlaying: 'y', side: 'right',
+      gridcolor: 'rgba(0,0,0,0)',
+      tickfont: { size: 10 },
+    },
+    legend: { x: 0.01, y: 0.99, bgcolor: 'transparent', font: { size: 10 } },
+    annotations: [{
+      x: 2014, y: 20903, yref: 'y', xref: 'x',
+      text: 'Inkl. Sondertilgung 2013/14',
+      showarrow: true, arrowhead: 2, ax: 60, ay: -30,
+      font: { size: 9, color: '#94a3b8' }, arrowcolor: '#94a3b8',
+    }],
+  });
+
+  Plotly.newPlot(el, traces, layout, { responsive: true, displayModeBar: false });
+}
+
+(function() {
+  var _origRVS = renderVermoegen;
+  renderVermoegen = function() {
+    _origRVS();
+    _renderSchulden();
+  };
+})();
+
 
 function setupTabs() {
   const TABS = ["overview", "details", "personal", "jahresvergleich", "zeitreihe", "hsk", "simulator", "vermoegen"];

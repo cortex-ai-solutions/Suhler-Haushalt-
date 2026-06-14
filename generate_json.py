@@ -847,6 +847,9 @@ def main():
     # ── Investitionen & Substanzerhalt ────────────────────────────────────────
     result["investitionen"] = make_investitionen(con)
 
+    # ── Schuldenentwicklung ───────────────────────────────────────────────────
+    result["schulden"] = make_schulden(con)
+
     # ── Ausgabe ───────────────────────────────────────────────────────────────
     with open(OUT_PATH, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, separators=(",", ":"))
@@ -867,6 +870,7 @@ def main():
         ("Beteiligungen",      len((result.get("beteiligungen") or {}).get("entities", []))),
         ("Finanzstroeme 2024", len((result.get("beteiligungen") or {}).get("stroeme", {}).get("2024", []))),
         ("Investitionen",      len(result.get("investitionen") or [])),
+        ("Schulden",           len(result.get("schulden") or [])),
     ]:
         print(f"     {k+':':25s} {v}")
     for yr in [2023, 2024, 2025]:
@@ -1219,6 +1223,23 @@ def make_investitionen(con) -> list:
             "quote":        quote,
         })
     return result
+
+
+def make_schulden(con) -> list:
+    rows = con.execute(
+        "SELECT jahr, schuldenstand_teur, einwohner, prokopf_eur, ist_prognose "
+        "FROM schulden_entwicklung ORDER BY jahr"
+    ).fetchall()
+    return [
+        {
+            "jahr": r[0],
+            "schuldenstand_teur": r[1],
+            "einwohner": r[2],
+            "prokopf_eur": r[3],
+            "ist_prognose": bool(r[4]),
+        }
+        for r in rows
+    ]
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ monthlyRunningCost: 0
 - [ ] HSK Stufe 3: Zielerreichungsquote implementieren (ab_haushaltsjahr als Baseline)
 - [ ] 17 HSK-Maßnahmen ohne TP-Zuordnung manuell zuweisen (FALLBACK_TP_MAP)
 - [ ] Orsi-Skill: Bilanz-Abfragen (detect_bilanz, query_bilanz) → Elestio
+- [ ] D) Personalquote (%) = Personalaufwand/KK5 je Jahr im Personal-Tab (~30 Min)
 - [x] ETL-Pipeline für 2023, 2024, 2025 abgeschlossen (89.808 Haushaltswerte)
 - [x] Dashboard mit 8 Tabs live auf GitHub Pages
 - [x] Stellenplan 2024 + 2025 in DB und Personal-Tab
@@ -25,15 +26,42 @@ monthlyRunningCost: 0
 - [x] HSK-Tab-Sichtbarkeits-Bug + Personal-TP-Accordion + Mobile-Navigation
 - [x] Vermögen-Tab (8. Tab): Bilanz 2020/2021 + EB KDS 2022-2024 mit Charts + Level-3-Detail
 - [x] Beteiligungen-Subtab: 15 Gesellschaften, Sankey Finanzströme 2024, Kennzahlen-Tabelle, JÜ-Chart
+- [x] A) Haushaltslage + C) Investitionen & Substanzerhalt im Zeitreihe-Tab (3 neue Charts)
+- [x] B) Schuldenentwicklung 2013–2026: pipeline_schulden.py + Chart im Vermögen-Tab
+
+## Nächste Feature-Iteration: "Was Stadträte wirklich brauchen"
+
+### A) Haushaltslage im Zeitverlauf — ✅ ERLEDIGT
+- Zeitreihe-Tab: KPI-Chips (Jahresergebnis, Finanzierungssaldo) + Gruppenbalken-Chart 2021–2025
+- Daten aus DATA.zeitreihe (IST 2021–2023, Plan 2024/2025), kein neuer ETL
+
+### B) Schulden und Eigenkapital — ✅ ERLEDIGT
+- pipeline_schulden.py: schulden_entwicklung-Tabelle (14 Einträge 2013–2026, Quelle S.83)
+- Vermögen-Tab Bilanz-Subtab: Schuldenentwicklung-Karte mit 3 KPI-Chips + Dual-Achsen-Chart
+- Schlüsselbefund: Schuldenstand 2013=54.419 T€ → 2025=2.020 T€ (Plan), 56 €/EW, Keine Neuverschuldung seit 2013
+
+### C) Investitionen und Substanzerhalt — ✅ ERLEDIGT
+- Zeitreihe-Tab: Balkendiagramm AfA vs. Investitions-Auszahlungen + Investitionsquoten-Linie
+- Schlüsselbefund: 2024 Investitionsquote=42% → Substanzverzehr (in Chart rot markiert)
+
+### D) Personal — OFFEN (~30 Min)
+- Personal-Tab vorhanden; fehlt: Personalquote (%) = Personalaufwand/KK5 je Jahr
+
+### Zweckverbände — NEUE DATEN NÖTIG
+- Beteiligungsbericht S. 80+: ZV Wasserversorgung, ZVE Entsorgung etc. nicht erfasst
+- [ ] pipeline_zweckverband.py + neuer Subtab im Vermögen-Tab (Aufwand: ~4–6h)
 
 ## Offene Punkte
 🟡 [Mittel] Stellenplan 2023: Benötigt HH-Plan 2024 PDF (Seiten 893–898)
 🟡 [Mittel] HSK Zielerreichungsquote: ab_haushaltsjahr in DB ist NULL für alle 78 Maßnahmen
+🟡 [Mittel] D) Personalquote (%) im Personal-Tab ergänzen (~30 Min)
 🟢 [Niedrig] 17 Maßnahmen ohne TP: FALLBACK_TP_MAP in pipeline_hsk.py ergänzen
 🟢 [Niedrig] Orsi-Skill Bilanz-Abfragen (Jahresabschluss) noch nicht implementiert
 🟢 [Niedrig] Jahresabschluss 2022+ sobald verfügbar → pipeline_bilanz.py erweitern
+🟢 [Niedrig] Zweckverbände: pipeline_zweckverband.py + Subtab
 
 ## KPIs
+Schulden 2025 (Plan): 2.020 T€ = 56 €/EW; Schuldenabbau 2013→2025: −52.399 T€ (−96 %)
 Haushaltswerte: 89.808
 ETL-Jahrgänge: 2023, 2024, 2025
 Dashboard-Tabs: 8 (Überblick, Details, Personal, Jahresvergleich, Zeitreihe, HSK, Simulator, Vermögen)
