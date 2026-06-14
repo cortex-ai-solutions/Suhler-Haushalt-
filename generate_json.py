@@ -844,6 +844,9 @@ def main():
     # ── Beteiligungen ─────────────────────────────────────────────────────────
     result["beteiligungen"] = make_beteiligungen(con)
 
+    # ── Investitionen & Substanzerhalt ────────────────────────────────────────
+    result["investitionen"] = make_investitionen(con)
+
     # ── Ausgabe ───────────────────────────────────────────────────────────────
     with open(OUT_PATH, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, separators=(",", ":"))
@@ -863,6 +866,7 @@ def main():
         ("HSK-Massnahmen",     len(result.get("hsk", {}).get("massnahmen", []))),
         ("Beteiligungen",      len((result.get("beteiligungen") or {}).get("entities", []))),
         ("Finanzstroeme 2024", len((result.get("beteiligungen") or {}).get("stroeme", {}).get("2024", []))),
+        ("Investitionen",      len(result.get("investitionen") or [])),
     ]:
         print(f"     {k+':':25s} {v}")
     for yr in [2023, 2024, 2025]:
@@ -1178,6 +1182,43 @@ def make_beteiligungen(con) -> dict | None:
         "kennzahlen": kennzahlen,
         "stroeme":    stroeme,
     }
+
+
+def make_investitionen(con) -> list:
+    """Abschreibungen (AfA, Konten 53xx) vs. Investitions-Auszahlungen (KK7 Konten 78xx) je Jahr."""
+    YEARS = [
+        (2021, "IST_ERGEBNIS", "Ist 2021",  False),
+        (2022, "IST_ERGEBNIS", "Ist 2022",  False),
+        (2023, "IST_ERGEBNIS", "Ist 2023",  False),
+        (2024, "PLAN_ANSATZ",  "Plan 2024", False),
+        (2025, "PLAN_ANSATZ",  "Plan 2025", False),
+    ]
+    result = []
+    for jahr, wert_typ, label, ist_prognose in YEARS:
+        afa = con.execute(
+            "SELECT COALESCE(SUM(h.betrag),0) FROM haushaltswerte h "
+            "JOIN konten k ON h.konto_id=k.id "
+            "WHERE k.konto_nummer LIKE '53%' AND h.daten_jahr=? AND h.wert_typ=?",
+            (jahr, wert_typ)
+        ).fetchone()[0]
+        invest = con.execute(
+            "SELECT COALESCE(SUM(h.betrag),0) FROM haushaltswerte h "
+            "JOIN konten k ON h.konto_id=k.id "
+            "WHERE k.konto_nummer LIKE '78%' AND h.daten_jahr=? AND h.wert_typ=?",
+            (jahr, wert_typ)
+        ).fetchone()[0]
+        afa_t    = round(afa    / 1000)
+        invest_t = round(invest / 1000)
+        quote = round(invest_t / afa_t * 100, 1) if afa_t > 0 and invest_t > 0 else None
+        result.append({
+            "jahr":         jahr,
+            "label":        label,
+            "ist_prognose": ist_prognose,
+            "afa_teur":     afa_t,
+            "invest_teur":  invest_t if invest_t > 0 else None,
+            "quote":        quote,
+        })
+    return result
 
 
 if __name__ == "__main__":

@@ -584,10 +584,41 @@
 
 <!-- ══════════ TAB: ZEITREIHE ══════════ -->
 <div id="tab-zeitreihe" class="hidden">
+  <!-- A) Haushaltslage im Zeitverlauf -->
+  <div class="card p-5 mb-6">
+    <div class="section-title">Haushaltslage im Zeitverlauf</div>
+    <p class="text-slate-400 text-sm mb-4">
+      Jahresergebnis (Ertr&auml;ge &minus; Aufwendungen) und Finanzierungssaldo
+      (Einzahlungen &minus; Auszahlungen) 2021&ndash;2025.
+      Gr&uuml;n&nbsp;= &Uuml;berschuss/positiv &middot; Rot&nbsp;= Fehlbetrag/negativ.
+      IST 2021&ndash;2023 &middot; Plan 2024&ndash;2025.
+    </p>
+    <div class="kpi-row mb-5" id="hl-kpi-row"></div>
+    <div id="chart-hl" class="plotly-chart" style="min-height:300px;"></div>
+    <div class="note mt-2">
+      IST-Werte aus Haushaltsjahresabschluss-Ergebnissen 2021&ndash;2023.
+      Plan 2024/2025 = Planansatz gem&auml;&szlig; Haushaltsplan.
+    </div>
+  </div>
+  <!-- bestehend: Ertraege & Aufwendungen -->
   <div class="card p-5 mb-6">
     <div class="section-title">Erträge & Aufwendungen 2022–2028</div>
     <div id="chart-zeitreihe" class="plotly-chart" style="min-height:420px;"></div>
     <div class="note mt-2">Schraffiert = Finanzplanung (Prognose). Quellen: Haushaltspläne Suhl 2023, 2024 &amp; 2025</div>
+  </div>
+  <!-- C) Investitionen & Substanzerhalt -->
+  <div class="card p-5 mb-6">
+    <div class="section-title">Investitionen &amp; Substanzerhalt</div>
+    <p class="text-slate-400 text-sm mb-4">
+      Bilanzielle Abschreibungen (AfA, Konten 53xx) vs. Investitions-Auszahlungen
+      (KK7 Konten 78xx). Eine Investitionsquote &lt;&nbsp;100&nbsp;% bedeutet
+      Substanzverzehr &mdash; die Stadt investiert weniger als sie abschreibt.
+    </p>
+    <div id="chart-invest" class="plotly-chart" style="min-height:340px;"></div>
+    <div class="note mt-2">
+      Quelle: Haushaltspl&auml;ne Suhl 2023&ndash;2025 (IST-Ergebnis 2021&ndash;2023, Planansatz 2024&ndash;2025).
+      Rote gestrichelte Linie = 100&nbsp;% (Substanzerhalt-Schwelle).
+    </div>
   </div>
 </div>
 
@@ -3038,6 +3069,141 @@ function _initBeteiligungen() {
     }
   }
 }
+function _renderHaushaltslage() {
+  var z = DATA.zeitreihe;
+  if (!z || !z.length) return;
+
+  var pts     = z.filter(function(d) { return !d.ist_prognose; });
+  var labels  = pts.map(function(d) { return d.label; });
+  var ergeb   = pts.map(function(d) { return Math.round((d.ertraege - d.aufwendungen) / 1000); });
+  var finsald = pts.map(function(d) { return Math.round((d.einzahlungen - d.auszahlungen) / 1000); });
+
+  var kpiEl = document.getElementById('hl-kpi-row');
+  if (kpiEl) {
+    function fmtT(v) {
+      if (v === null || v === undefined) return '-';
+      return (v >= 0 ? '+' : '-') + Math.abs(v).toLocaleString('de-DE') + ' T\u20ac';
+    }
+    function chip(lbl, val, sub) {
+      var col = val >= 0 ? '#4ade80' : '#f87171';
+      return '<div class="kpi-card" style="flex:1;min-width:160px">'
+        + '<div class="kpi-label">' + lbl + '</div>'
+        + '<div class="kpi-value" style="color:' + col + ';font-size:1.35rem">' + fmtT(val) + '</div>'
+        + '<div class="kpi-label" style="font-size:0.65rem;margin-top:2px;color:#64748b">' + sub + '</div>'
+        + '</div>';
+    }
+    var i23 = labels.indexOf('Ist 2023');
+    var i25 = labels.indexOf('Ansatz 2025');
+    var html = '';
+    if (i23 >= 0) html += chip('Jahresergebnis 2023 (Ist)',      ergeb[i23],   'KK4 \u2212 KK5');
+    if (i25 >= 0) html += chip('Jahresergebnis 2025 (Plan)',     ergeb[i25],   'KK4 \u2212 KK5');
+    if (i25 >= 0) html += chip('Finanzierungssaldo 2025 (Plan)', finsald[i25], 'KK6 \u2212 KK7');
+    kpiEl.innerHTML = html;
+  }
+
+  if (typeof Plotly === 'undefined') return;
+  var colErgeb   = ergeb.map(function(v)  { return v >= 0 ? '#4ade80' : '#f87171'; });
+  var colFinsald = finsald.map(function(v) { return v >= 0 ? '#38bdf8' : '#94a3b8'; });
+
+  Plotly.newPlot('chart-hl', [
+    {
+      type: 'bar', name: 'Jahresergebnis (T\u20ac)',
+      x: labels, y: ergeb, marker: { color: colErgeb },
+      hovertemplate: '%{x}: %{y:,.0f} T\u20ac<extra>Jahresergebnis</extra>'
+    },
+    {
+      type: 'bar', name: 'Finanzierungssaldo (T\u20ac)',
+      x: labels, y: finsald, marker: { color: colFinsald },
+      hovertemplate: '%{x}: %{y:,.0f} T\u20ac<extra>Finanzierungssaldo</extra>'
+    }
+  ], Object.assign({}, DARK_LAYOUT, {
+    height: 300,
+    barmode: 'group',
+    xaxis: { gridcolor: '#334155' },
+    yaxis: {
+      gridcolor: '#334155', tickformat: ',d', title: 'T\u20ac',
+      zeroline: true, zerolinecolor: '#64748b', zerolinewidth: 1
+    },
+    legend: { orientation: 'h', y: -0.22 },
+    margin: { t: 10, b: 60, l: 75, r: 20 },
+    shapes: [{
+      type: 'line', xref: 'paper', yref: 'y',
+      x0: 0, x1: 1, y0: 0, y1: 0,
+      line: { color: '#475569', width: 1, dash: 'dot' }
+    }]
+  }), CFG);
+}
+
+function _renderInvestitionen() {
+  var inv = DATA.investitionen;
+  if (!inv || !inv.length) return;
+  if (typeof Plotly === 'undefined') return;
+
+  var labels = inv.map(function(d) { return d.label; });
+  var afa    = inv.map(function(d) { return d.afa_teur; });
+  var invest = inv.map(function(d) { return d.invest_teur !== null ? d.invest_teur : null; });
+  var quote  = inv.map(function(d) { return d.quote; });
+
+  var quoteCol = quote.map(function(v) {
+    if (v === null) return '#94a3b8';
+    if (v >= 100)   return '#4ade80';
+    if (v >= 75)    return '#fbbf24';
+    return '#f87171';
+  });
+
+  Plotly.newPlot('chart-invest', [
+    {
+      type: 'bar', name: 'Abschreibungen AfA (T\u20ac)',
+      x: labels, y: afa, marker: { color: '#f59e0b' },
+      hovertemplate: '%{x}: %{y:,.0f} T\u20ac<extra>Abschreibungen (AfA)</extra>'
+    },
+    {
+      type: 'bar', name: 'Investitions-Auszahlungen (T\u20ac)',
+      x: labels, y: invest, marker: { color: '#0d9488' },
+      hovertemplate: '%{x}: %{y:,.0f} T\u20ac<extra>Investitions-Auszahlungen</extra>'
+    },
+    {
+      type: 'scatter', mode: 'lines+markers',
+      name: 'Investitionsquote (%)',
+      x: labels, y: quote, yaxis: 'y2',
+      line: { color: '#e2e8f0', width: 2 },
+      marker: { size: 9, color: quoteCol, line: { color: '#0f172a', width: 1.5 } },
+      hovertemplate: '%{x}: %{y:.1f} %<extra>Investitionsquote</extra>'
+    }
+  ], Object.assign({}, DARK_LAYOUT, {
+    height: 340,
+    barmode: 'group',
+    xaxis: { gridcolor: '#334155' },
+    yaxis: { gridcolor: '#334155', tickformat: ',d', title: 'T\u20ac' },
+    yaxis2: {
+      overlaying: 'y', side: 'right',
+      title: '%', showgrid: false,
+      tickformat: '.0f', range: [0, 160], ticksuffix: ' %'
+    },
+    legend: { orientation: 'h', y: -0.22 },
+    margin: { t: 10, b: 60, l: 75, r: 70 },
+    shapes: [{
+      type: 'line', xref: 'paper', yref: 'y2',
+      x0: 0, x1: 1, y0: 100, y1: 100,
+      line: { color: '#f87171', width: 1.5, dash: 'dash' }
+    }],
+    annotations: [{
+      xref: 'paper', yref: 'y2', x: 1.02, y: 100,
+      text: '100 %', showarrow: false,
+      font: { color: '#f87171', size: 10 }, xanchor: 'left'
+    }]
+  }), CFG);
+}
+
+(function() {
+  var _origRZT = renderZeitreihe;
+  renderZeitreihe = function() {
+    _origRZT();
+    _renderHaushaltslage();
+    _renderInvestitionen();
+  };
+})();
+
 function setupTabs() {
   const TABS = ["overview", "details", "personal", "jahresvergleich", "zeitreihe", "hsk", "simulator", "vermoegen"];
   document.querySelectorAll("#tabbar .tab").forEach(tab => {
