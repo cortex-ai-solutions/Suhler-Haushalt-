@@ -1032,7 +1032,38 @@ def make_bilanz(con) -> dict | None:
             (aktiva if r["seite"] == "AKTIVA" else passiva).append(entry)
         by_year[str(yr)] = {"aktiva": aktiva, "passiva": passiva}
 
-    return {"jahre": jahre, "by_year": by_year}
+    entwicklung = {
+        "bilanzsumme_2021_teur": 279_459,
+        "veraenderung_seit_2013_teur": 38_365,
+        "quelle_seite": 153,
+        "aktivseite": [
+            {"position": "Immaterielle VG", "code": "A1.1", "delta_teur": 3_867,
+             "anmerkung": "Anstieg immaterieller VG (Konzessionen, Zuwendungen)"},
+            {"position": "Sachanlagen", "code": "A1.2", "delta_teur": 16_318,
+             "davon_eingemeindung_teur": 16_959,
+             "anmerkung": "Eingemeindung +16.959 T€; saldiert Werteverzehr beim Sachanlagevermögen"},
+            {"position": "Finanzanlagevermögen", "code": "A1.3", "delta_teur": 3_873,
+             "davon_eingemeindung_teur": 2_220, "davon_eb_kds_ek_teur": 1_037,
+             "anmerkung": "Eingemeindung +2.220 T€, EB KDS Eigenkapitalerhöhung +1.037 T€"},
+            {"position": "Kassenbestand", "code": "A2.4", "delta_teur": 10_153,
+             "anmerkung": "Verbliebene Mittel aus Verkauf der E.ON-Aktien"},
+        ],
+        "passivseite": [
+            {"position": "Allgemeine Rücklage", "code": "P1.1", "delta_teur": 3_280,
+             "davon_eingemeindung_teur": 7_303,
+             "anmerkung": "Eingemeindung +7.303 T€, saldiert mit Korrekturen Eröffnungsbilanz"},
+            {"position": "Jahresergebnis + Ergebnisvortrag", "code": "P1.4+P1.5",
+             "delta_teur": 78_371,
+             "anmerkung": "Positive Jahresergebnisse; Großteil aus E.ON-Aktienverkauf"},
+            {"position": "Sonderposten", "code": "P2", "delta_teur": 17_714,
+             "davon_eingemeindung_teur": 9_829,
+             "anmerkung": "Erhöhung durch Fördermittel und Eingemeindung (+9.829 T€)"},
+            {"position": "Investitionskredite", "code": "P4.2", "delta_teur": -58_596,
+             "anmerkung": "Schuldenabbau: Rückgang der Investitionskredite um 58,6 Mio €"},
+        ]
+    }
+
+    return {"jahre": jahre, "by_year": by_year, "entwicklung": entwicklung}
 
 
 def make_eb_kds(con) -> dict | None:

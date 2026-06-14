@@ -718,6 +718,25 @@
           die Stadt finanziert ausschlie&szlig;lich &uuml;ber Investitionskredite (9,9&nbsp;Mio.&nbsp;&#8364;).&nbsp;
           <strong class="text-slate-300">Quelle:</strong> Jahresabschluss der Stadt Suhl, 31.12.2021.
         </p>
+      <!-- Detail-Charts Ebene 3 -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+        <div class="card p-5">
+          <div class="section-title">Sachanlagen 2021 &ndash; 10 Positionen (Mio.&nbsp;&#8364;)</div>
+          <div id="chart-sachanlagen-detail" style="height:340px"></div>
+        </div>
+        <div class="card p-5">
+          <div class="section-title">Finanzanlageverm&ouml;gen 2021 &ndash; Beteiligungen</div>
+          <div id="chart-finanzanlage-detail" style="height:340px"></div>
+        </div>
+      </div>
+      <div class="card p-5 mt-4">
+        <div class="section-title">Verbindlichkeiten-Aufschl&uuml;sselung 2020 vs. 2021 (Mio.&nbsp;&#8364;)</div>
+        <div id="chart-vb-detail" style="height:280px"></div>
+      </div>
+      <div class="card p-5 mt-4">
+        <div class="section-title">Bilanzentwicklung seit 01.01.2013</div>
+        <div id="bilanz-entwicklung-body" class="text-sm mt-2"></div>
+      </div>
       </div>
     </div>
 
@@ -875,6 +894,133 @@ function init() {
   initDetails();
   initPersonal();
   initHsk();
+    // ── Bilanz Detail-Charts (Level 3) ──────────────────────────────────
+    var _bilanzDetailRendered = false;
+    var _origRenderVermoegenBD = renderVermoegen;
+    renderVermoegen = function() {
+      _origRenderVermoegenBD();
+      if (!_bilanzDetailRendered && DATA && DATA.bilanz) {
+        _bilanzDetailRendered = true;
+        _renderBilanzDetail();
+      }
+    };
+
+    function _renderBilanzDetail() {
+      var B = DATA.bilanz;
+      if (!B || !B.by_year) return;
+      var yr21 = B.by_year["2021"] || {aktiva:[], passiva:[]};
+      var yr20 = B.by_year["2020"] || {aktiva:[], passiva:[]};
+
+      function gc(items, code) {
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].code === code) return items[i].betrag;
+        }
+        return 0;
+      }
+      function mio(v) { return Math.round(v / 10000) / 100; }
+
+      var CFG2 = {responsive: true, displayModeBar: false};
+
+      // ── Sachanlagen (A1.2.x) Horizontal Bar ─────────────────────────
+      var SACH_CODES = ["A1.2.4","A1.2.3","A1.2.1","A1.2.10","A1.2.7",
+                        "A1.2.9","A1.2.8","A1.2.6","A1.2.2","A1.2.5"];
+      var SACH_LBL  = ["Infrastruktur","Bebaute Grundst.","Wald, Forsten",
+                        "Anlagen im Bau","Maschinen & KFZ","Pflanzen & Tiere",
+                        "Betriebs-/GA","Kunst & Denkm.","Unbebaute Grundst.",
+                        "Bauten (fremd. Grund)"];
+      var sach21 = SACH_CODES.map(function(c){return mio(gc(yr21.aktiva,c));});
+      var sach20 = SACH_CODES.map(function(c){return mio(gc(yr20.aktiva,c));});
+      var sachLayout = Object.assign({}, DARK_LAYOUT, {
+        barmode: "group",
+        margin: {l:145, r:20, t:20, b:40},
+        xaxis: {title: "Mio. €"},
+        yaxis: {tickfont: {size:11}},
+        legend: {x:0.5, y:1.05, xanchor:"center", orientation:"h"}
+      });
+      Plotly.newPlot("chart-sachanlagen-detail", [
+        {name:"2020", type:"bar", orientation:"h", x:sach20, y:SACH_LBL,
+         marker:{color:"rgba(148,163,184,0.7)"},
+         hovertemplate:"%{x:.2f} Mio.<extra>2020</extra>"},
+        {name:"2021", type:"bar", orientation:"h", x:sach21, y:SACH_LBL,
+         marker:{color:"rgba(56,189,248,0.85)"},
+         hovertemplate:"%{x:.2f} Mio.<extra>2021</extra>"}
+      ], sachLayout, CFG2);
+
+      // ── Finanzanlagevermögen (A1.3.x) Donut ─────────────────────────
+      var FA_CODES  = ["A1.3.1","A1.3.5","A1.3.3","A1.3.7"];
+      var FA_LBL    = ["EB KDS & verbund.Untern.","Sonderverm./Zweckverb.",
+                       "Beteiligungen","Wertpapiere AV"];
+      var fa21 = FA_CODES.map(function(c){return gc(yr21.aktiva,c);});
+      Plotly.newPlot("chart-finanzanlage-detail",
+        [{type:"pie", values:fa21, labels:FA_LBL, hole:0.4,
+          textinfo:"label+percent",
+          marker:{colors:["#38bdf8","#818cf8","#34d399","#fb923c"]},
+          hovertemplate:"%{label}<br>%{value:,.0f} €<extra></extra>"}],
+        Object.assign({}, DARK_LAYOUT, {
+          margin:{l:10,r:10,t:30,b:10}, showlegend:false,
+          annotations:[{text:"61,2 Mio.", x:0.5, y:0.5, xanchor:"center",
+                        font:{size:13,color:"#e2e8f0"}, showarrow:false}]
+        }), CFG2);
+
+      // ── Verbindlichkeiten (P4.x) Bar ─────────────────────────────────
+      var VB_CODES = ["P4.2","P4.5","P4.6","P4.7","P4.8","P4.9","P4.10","P4.11"];
+      var VB_LBL   = ["Investitionskredite","Lief. & Leistungen","Transferleistungen",
+                       "Verbund.Unternehmen","Beteiligungen","Sondervermögen",
+                       "Öff.Bereich sonst.","Sonstige VB"];
+      var vb21 = VB_CODES.map(function(c){return mio(gc(yr21.passiva,c));});
+      var vb20 = VB_CODES.map(function(c){return mio(gc(yr20.passiva,c));});
+      Plotly.newPlot("chart-vb-detail", [
+        {name:"2020", type:"bar", x:VB_LBL, y:vb20,
+         marker:{color:"rgba(148,163,184,0.7)"},
+         hovertemplate:"%{x}<br>%{y:.2f} Mio.<extra>2020</extra>"},
+        {name:"2021", type:"bar", x:VB_LBL, y:vb21,
+         marker:{color:"rgba(251,146,60,0.85)"},
+         hovertemplate:"%{x}<br>%{y:.2f} Mio.<extra>2021</extra>"}
+      ], Object.assign({}, DARK_LAYOUT, {
+        barmode:"group",
+        margin:{l:50, r:20, t:20, b:90},
+        yaxis:{title:"Mio. €"},
+        xaxis:{tickangle:-35, tickfont:{size:11}},
+        legend:{x:0.5, y:1.05, xanchor:"center", orientation:"h"}
+      }), CFG2);
+
+      // ── Bilanzentwicklung seit 2013 ───────────────────────────────────
+      var elBE = document.getElementById("bilanz-entwicklung-body");
+      if (elBE && B.entwicklung) {
+        var e = B.entwicklung;
+        var h = "";
+        h += "<p class=\"text-slate-300 mb-3\">Die Bilanzsumme hat sich vom 01.01.2013"
+           + " bis 31.12.2021 um <strong class=\"text-sky-400\">+"
+           + e.veraenderung_seit_2013_teur.toLocaleString("de-DE") + "\u00a0T\u20ac</strong>"
+           + " auf " + e.bilanzsumme_2021_teur.toLocaleString("de-DE") + "\u00a0T\u20ac erh\u00f6ht.</p>";
+        h += "<div class=\"grid grid-cols-1 md:grid-cols-2 gap-4\">";
+        var sides = [
+          {title:"Aktivseite", key:"aktivseite"},
+          {title:"Passivseite", key:"passivseite"}
+        ];
+        sides.forEach(function(s) {
+          h += "<div><div class=\"text-xs font-semibold text-slate-400 uppercase mb-2\">"
+             + s.title + "</div><ul class=\"space-y-1\">";
+          (e[s.key] || []).forEach(function(item) {
+            var sign = item.delta_teur > 0 ? "+" : "";
+            var cls  = item.delta_teur > 0 ? "text-emerald-400" : "text-red-400";
+            h += "<li class=\"flex justify-between items-start\">"
+               + "<span class=\"text-slate-300\">" + item.position + "</span>"
+               + "<span class=\"" + cls + " font-mono ml-3 whitespace-nowrap\">"
+               + sign + item.delta_teur.toLocaleString("de-DE") + "\u00a0T\u20ac</span></li>";
+            if (item.anmerkung) {
+              h += "<li class=\"text-slate-500 text-xs pl-2 pb-1\">" + item.anmerkung + "</li>";
+            }
+          });
+          h += "</ul></div>";
+        });
+        h += "</div>";
+        h += "<p class=\"text-slate-500 text-xs mt-3\">Quelle: Jahresabschluss der Stadt Suhl 31.12.2021,"
+           + " Seite " + e.quelle_seite + "</p>";
+        elBE.innerHTML = h;
+      }
+    }
+
   setupTabs();
   document.getElementById("toggle-gestaltbar").addEventListener("change", renderTreemap);
   document.getElementById("generiert-am").textContent = "Stand: " + new Date(DATA.meta.generiert_am).toLocaleDateString("de-DE");
