@@ -297,6 +297,13 @@
     <div id="chart-pers-trend" class="plotly-chart" style="height:280px"></div>
   </div>
 
+  <!-- Personalquote Zeitreihe -->
+  <div class="card p-5 mb-6">
+    <div class="section-title">Personalquote im Zeitverlauf 2021&#8211;2025</div>
+    <p class="text-slate-400 text-xs mb-3">Personalaufwand (Konten 50xx) als Anteil an Gesamtaufwendungen (KK5). IST 2021&#8211;2023, Plan 2024/2025.</p>
+    <div id="chart-pers-quote-trend" style="height:220px"></div>
+  </div>
+
   <!-- Detail-Tabelle -->
   <div class="card p-5">
     <div class="section-title mb-3">Personalkosten nach Teilplan &amp; Kostenart</div>
@@ -1723,8 +1730,7 @@ function renderPersonal() {
   const tarifSum  = (y.bez_tarif  || 0) + (y.vers_tarif  || 0) + (y.sv || 0);
   document.getElementById("pers-kpi-beamte").textContent = fmt(beamteSum / y.gesamt * 100, 1) + " %";
   document.getElementById("pers-kpi-tarif").textContent  = fmt(tarifSum  / y.gesamt * 100, 1) + " %";
-  const ydMeta = getYD() && getYD().meta;
-  const quote = ydMeta && ydMeta.aufwendungen_kk5 ? y.gesamt / ydMeta.aufwendungen_kk5 * 100 : null;
+  const quote = (y.personalquote_pct != null) ? y.personalquote_pct : null;
   document.getElementById("pers-kpi-quote").textContent = quote !== null ? fmt(quote, 1) + " %" : "–";
 
   // Farben
@@ -3296,6 +3302,61 @@ function _renderSchulden() {
     _origRVS();
     _renderSchulden();
   };
+})();
+
+// — Personalquote-Zeitreihe —
+function _renderPersonalquote() {
+  var el = document.getElementById('chart-pers-quote-trend');
+  if (!el || !DATA.personal || !DATA.personal.personalquote_zeitreihe) return;
+  var pqz = DATA.personal.personalquote_zeitreihe;
+  var years  = pqz.map(function(r) { return r.label; });
+  var quotes = pqz.map(function(r) { return r.quote_pct; });
+  var mcolors = pqz.map(function(r) {
+    return r.ist_prognose ? 'rgba(251,146,60,0.6)' : '#f97316';
+  });
+
+  Plotly.newPlot(el, [
+    {
+      type: 'scatter', mode: 'lines+markers',
+      name: 'Personalquote',
+      x: years, y: quotes,
+      line:   { color: '#f97316', width: 2.5 },
+      marker: { color: mcolors, size: 8, line: { color: '#f97316', width: 1 } },
+      hovertemplate: '<b>%{x}</b><br>Personalquote: %{y:.1f} %<extra></extra>',
+    },
+    {
+      type: 'bar',
+      name: 'Personalaufwand T\u20ac',
+      x: years,
+      y: pqz.map(function(r) { return r.personal_teur; }),
+      marker: { color: pqz.map(function(r) {
+        return r.ist_prognose ? 'rgba(129,140,248,0.35)' : 'rgba(129,140,248,0.7)';
+      }) },
+      yaxis: 'y2',
+      hovertemplate: '<b>%{x}</b><br>%{y:,.0f} T\u20ac<extra></extra>',
+    },
+  ], Object.assign({}, DARK_LAYOUT, {
+    height: 200,
+    margin: { t: 10, b: 50, l: 45, r: 55 },
+    yaxis: {
+      title: { text: '% von KK5', font: { size: 11 } },
+      range: [20, 32],
+      gridcolor: '#334155', tickfont: { size: 10 },
+      ticksuffix: ' %',
+    },
+    yaxis2: {
+      title: { text: 'T\u20ac', font: { size: 11 } },
+      overlaying: 'y', side: 'right',
+      gridcolor: 'rgba(0,0,0,0)', tickfont: { size: 10 },
+    },
+    legend: { x: 0.01, y: 0.99, bgcolor: 'transparent', font: { size: 10 } },
+    barmode: 'group',
+  }), { responsive: true, displayModeBar: false });
+}
+
+(function() {
+  var _origRP = renderPersonal;
+  renderPersonal = function() { _origRP(); _renderPersonalquote(); };
 })();
 
 

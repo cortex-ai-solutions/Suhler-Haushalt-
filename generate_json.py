@@ -570,8 +570,18 @@ def make_personal(con):
 
         gesamt = sum(gesamt_gruppen.values())
 
+        total_kk5 = con.execute(
+            "SELECT COALESCE(SUM(h.betrag),0) FROM haushaltswerte h "
+            "JOIN konten k ON h.konto_id=k.id "
+            "JOIN kontenklassen kk ON k.kontenklasse_id=kk.id "
+            "WHERE kk.nummer=5 AND h.daten_jahr=? AND h.wert_typ=?",
+            (yr, WERT_TYP)
+        ).fetchone()[0]
+        personalquote_pct = round(gesamt / total_kk5 * 100, 1) if total_kk5 > 0 else None
+
         by_year[str(yr)] = {
-            "gesamt":       round(gesamt, 2),
+            "gesamt":             round(gesamt, 2),
+            "personalquote_pct":  personalquote_pct,
             **{g: round(v, 2) for g, v in gesamt_gruppen.items()},
             "nach_tp": {
                 tp: {k: round(v, 2) if isinstance(v, float) else v
@@ -580,9 +590,42 @@ def make_personal(con):
             },
         }
 
+    # Personalquote-Zeitreihe 2021-2025 (IST für 2021-2023, Plan für 2024/2025)
+    FULL_YEARS = [
+        (2021, "IST_ERGEBNIS", "Ist 2021",  False),
+        (2022, "IST_ERGEBNIS", "Ist 2022",  False),
+        (2023, "IST_ERGEBNIS", "Ist 2023",  False),
+        (2024, "PLAN_ANSATZ",  "Plan 2024", True),
+        (2025, "PLAN_ANSATZ",  "Plan 2025", True),
+    ]
+    personalquote_zeitreihe = []
+    for yr_f, wt_f, lbl_f, prog_f in FULL_YEARS:
+        personal_sum = con.execute(
+            "SELECT COALESCE(SUM(h.betrag),0) FROM haushaltswerte h "
+            "JOIN konten k ON h.konto_id=k.id "
+            "WHERE k.konto_nummer LIKE '50%' AND h.daten_jahr=? AND h.wert_typ=?",
+            (yr_f, wt_f)
+        ).fetchone()[0]
+        kk5_sum = con.execute(
+            "SELECT COALESCE(SUM(h.betrag),0) FROM haushaltswerte h "
+            "JOIN konten k ON h.konto_id=k.id "
+            "JOIN kontenklassen kk ON k.kontenklasse_id=kk.id "
+            "WHERE kk.nummer=5 AND h.daten_jahr=? AND h.wert_typ=?",
+            (yr_f, wt_f)
+        ).fetchone()[0]
+        personalquote_zeitreihe.append({
+            "jahr":          yr_f,
+            "label":         lbl_f,
+            "ist_prognose":  prog_f,
+            "personal_teur": round(personal_sum / 1000),
+            "kk5_teur":      round(kk5_sum / 1000),
+            "quote_pct":     round(personal_sum / kk5_sum * 100, 1) if kk5_sum > 0 else None,
+        })
+
     return {
-        "gruppen_labels": GRUPPEN_LABELS,
-        "by_year":        by_year,
+        "gruppen_labels":           GRUPPEN_LABELS,
+        "by_year":                  by_year,
+        "personalquote_zeitreihe":  personalquote_zeitreihe,
     }
 
 
