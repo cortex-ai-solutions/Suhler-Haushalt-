@@ -962,7 +962,7 @@ function switchYear(jahr) {
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────
-fetch("budget_data.json")
+fetch("budget_data.json?v=20260615b")
   .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
   .then(d => { DATA = d; init(); })
   .catch(e => {
