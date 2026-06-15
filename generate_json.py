@@ -893,6 +893,9 @@ def main():
     # ── Schuldenentwicklung ───────────────────────────────────────────────────
     result["schulden"] = make_schulden(con)
 
+    # ── Zweckverbände ─────────────────────────────────────────────────────────
+    result["zweckverbände"] = make_zweckverbände(con)
+
     # ── Ausgabe ───────────────────────────────────────────────────────────────
     with open(OUT_PATH, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, separators=(",", ":"))
@@ -914,6 +917,7 @@ def main():
         ("Finanzstroeme 2024", len((result.get("beteiligungen") or {}).get("stroeme", {}).get("2024", []))),
         ("Investitionen",      len(result.get("investitionen") or [])),
         ("Schulden",           len(result.get("schulden") or [])),
+        ("Zweckverbände",      len(result.get("zweckverbände") or [])),
     ]:
         print(f"     {k+':':25s} {v}")
     for yr in [2023, 2024, 2025]:
@@ -1266,6 +1270,24 @@ def make_investitionen(con) -> list:
             "quote":        quote,
         })
     return result
+
+
+def make_zweckverbände(con) -> list:
+    rows = con.execute(
+        "SELECT nr, kuerzel, name, kategorie, adresse, anmerkung "
+        "FROM zweckverbände ORDER BY nr"
+    ).fetchall()
+    return [
+        {
+            "nr":        r[0],
+            "kuerzel":   r[1],
+            "name":      r[2],
+            "kategorie": r[3],
+            "adresse":   r[4],
+            "anmerkung": r[5],
+        }
+        for r in rows
+    ]
 
 
 def make_schulden(con) -> list:

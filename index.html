@@ -727,6 +727,11 @@
                      color:#94a3b8;border-bottom:2px solid transparent;cursor:pointer;font-size:0.875rem;">
         Beteiligungen
       </button>
+      <button class="vermoegen-subtab" data-vtab="zvb" onclick="_switchVTab('zvb')"
+              style="padding:0.5rem 1.25rem;background:transparent;border:none;
+                     color:#94a3b8;border-bottom:2px solid transparent;cursor:pointer;font-size:0.875rem;">
+        Zweckverbände
+      </button>
     </div>
 
     <div id="vtab-bilanz">
@@ -867,6 +872,39 @@
       </div>
     </div><!-- /vtab-beteiligungen -->
 
+    <div id="vtab-zvb" class="hidden">
+      <p class="text-slate-400 text-sm mb-5">
+        Suhl ist Mitglied in 13 Zweckverbänden für Pflichtaufgaben der Daseinsvorsorge
+        (Quelle: Beteiligungsbericht GJ 2024, S. 80–86).
+      </p>
+
+      <!-- KPI-Chips -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        <div class="card p-4 text-center">
+          <div class="text-2xl font-bold text-blue-400">13</div>
+          <div class="text-xs text-slate-400 mt-1">Zweckverbände gesamt</div>
+        </div>
+        <div class="card p-4 text-center">
+          <div class="text-2xl font-bold text-cyan-400">4</div>
+          <div class="text-xs text-slate-400 mt-1">Wasser &amp; Abwasser</div>
+        </div>
+        <div class="card p-4 text-center">
+          <div class="text-2xl font-bold text-orange-400">3</div>
+          <div class="text-xs text-slate-400 mt-1">Gewässerunterhaltung</div>
+        </div>
+        <div class="card p-4 text-center">
+          <div class="text-2xl font-bold text-yellow-400">6</div>
+          <div class="text-xs text-slate-400 mt-1">Kategorien</div>
+        </div>
+      </div>
+
+      <!-- Tabelle -->
+      <div class="card p-5">
+        <div class="section-title mb-3">Mitgliedschaften nach Kategorie</div>
+        <div id="zvb-table-container"></div>
+      </div>
+    </div><!-- /vtab-zvb -->
+
   </div>
 </div>
 <div id="drilldown-overlay" class="hidden" onclick="if(event.target===this)closeDrillDown()">
@@ -962,7 +1000,7 @@ function switchYear(jahr) {
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────
-fetch("budget_data.json?v=20260615b")
+fetch("budget_data.json?v=20260615c")
   .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
   .then(d => { DATA = d; init(); })
   .catch(e => {
@@ -3357,6 +3395,72 @@ function _renderPersonalquote() {
 (function() {
   var _origRP = renderPersonal;
   renderPersonal = function() { _origRP(); _renderPersonalquote(); };
+})();
+
+// -- Zweckverbände Subtab --
+var _zvbRendered = false;
+function _renderZvb() {
+  if (_zvbRendered) return;
+  var el = document.getElementById('zvb-table-container');
+  var zvb = DATA["zweckverb\u00e4nde"];
+  if (!el || !zvb || !zvb.length) return;
+
+  var CATS = {
+    WASSER:    { label: 'Wasser &amp; Abwasser',      color: '#3b82f6' },
+    GEWAESSER: { label: 'Gew\u00e4sserunterhaltung', color: '#06b6d4' },
+    RETTUNG:   { label: 'Rettungsdienst',            color: '#ef4444' },
+    ABFALL:    { label: 'Abfallwirtschaft',          color: '#f97316' },
+    ENERGIE:   { label: 'Energie &amp; IT',           color: '#eab308' },
+    SONSTIGES: { label: 'Sonstiges',                 color: '#94a3b8' },
+  };
+  var ORDER = ['WASSER','GEWAESSER','RETTUNG','ABFALL','ENERGIE','SONSTIGES'];
+
+  var grouped = {};
+  ORDER.forEach(function(c) { grouped[c] = []; });
+  zvb.forEach(function(v) {
+    if (grouped[v.kategorie]) grouped[v.kategorie].push(v);
+  });
+
+  var html = '';
+  ORDER.forEach(function(cat) {
+    var list = grouped[cat];
+    if (!list || !list.length) return;
+    var m = CATS[cat];
+    html += '<div class="mb-6">';
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">';
+    html += '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:'+ m.color +';flex-shrink:0;"></span>';
+    html += '<span class="font-semibold text-sm" style="color:'+ m.color +';">' + m.label + '</span>';
+    html += '</div>';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:0.8rem;">';
+    html += '<thead><tr style="border-bottom:1px solid #334155;">';
+    html += '<th style="text-align:left;padding:4px 6px;color:#94a3b8;font-weight:500;white-space:nowrap;">K\u00fcrzel</th>';
+    html += '<th style="text-align:left;padding:4px 6px;color:#94a3b8;font-weight:500;">Name</th>';
+    html += '<th style="text-align:left;padding:4px 6px;color:#94a3b8;font-weight:500;">Anmerkung</th>';
+    html += '</tr></thead><tbody>';
+    list.forEach(function(v, i) {
+      var bg = i % 2 === 0 ? 'rgba(30,41,59,0.5)' : 'transparent';
+      html += '<tr style="background:'+ bg +';border-bottom:1px solid #1e293b;">';
+      html += '<td style="padding:5px 6px;white-space:nowrap;"><span style="font-family:monospace;font-size:0.73rem;background:#1e3a5f;color:#93c5fd;padding:2px 6px;border-radius:4px;">' + v.kuerzel + '</span></td>';
+      html += '<td style="padding:5px 6px;">' + v.name + '</td>';
+      html += '<td style="padding:5px 6px;color:#94a3b8;font-size:0.75rem;">' + (v.anmerkung || '') + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+  });
+  el.innerHTML = html;
+  _zvbRendered = true;
+}
+
+(function() {
+  var _origSVT = _switchVTab;
+  _switchVTab = function(name) {
+    _origSVT(name);
+    var zvbEl = document.getElementById('vtab-zvb');
+    if (zvbEl) {
+      zvbEl.classList.toggle('hidden', name !== 'zvb');
+      if (name === 'zvb') _renderZvb();
+    }
+  };
 })();
 
 
