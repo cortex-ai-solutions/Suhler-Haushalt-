@@ -150,6 +150,43 @@ HSK_KEYWORDS = [
     "wieviel hat suhl gespart",
 ]
 
+# Personalausgaben-Keywords (Personalkosten in €, NICHT Stellenplan/Headcount!)
+# Bewusst mehrwortig/spezifisch, damit "Personalausgaben 2025" nicht ueber
+# TEILPLAN_KEYWORDS["personal"] -> TP03 in den generischen Teilplan-Fallback laeuft.
+PERSONALAUSGABEN_KEYWORDS = [
+    "personalausgaben", "personalkosten", "personalaufwand",
+    "personalaufwendungen", "dienstbezüge", "dienstbezuege",
+    "gehälter", "gehaelter", "löhne", "loehne", "lohnkosten",
+    "personalquote",
+]
+
+# Beteiligungen-Keywords (staedtische Gesellschaften: Umsatz, Gewinn/Verlust, Kennzahlen)
+BETEILIGUNG_KEYWORDS = [
+    "beteiligung", "beteiligungen", "beteiligungsunternehmen",
+    "tochtergesellschaft", "tochtergesellschaften", "gesellschaft",
+    "gesellschaften", "eigenbetrieb",
+]
+
+# Bilanz-Keywords: Text-Trigger -> Suchbegriff fuer bezeichnung LIKE in bilanz_positionen
+# None-Wert = generischer Trigger ohne Suchbegriff (zeigt Ebene-1-Uebersicht)
+BILANZ_KEYWORDS = {
+    "rückstellung":         "rückstellung",
+    "rueckstellung":        "rückstellung",
+    "verbindlichkeit":      "verbindlichkeit",
+    "forderung":            "forderung",
+    "rücklage":             "rücklage",
+    "ruecklage":            "rücklage",
+    "eigenkapital":         "eigenkapital",
+    "sachanlage":           "sachanlage",
+    "finanzanlage":         "finanzanlage",
+    "sonderposten":         "sonderposten",
+    "rechnungsabgrenzung":  "rechnungsabgrenzung",
+    "bilanzsumme":          None,
+    "bilanz":               None,
+    "vermögen":             None,
+    "vermoegen":            None,
+}
+
 
 # ── DB-Zugriff ────────────────────────────────────────────────────────────────
 
@@ -251,6 +288,23 @@ def get_stellenplan_years(con):
     return [r[0] for r in rows]
 
 
+def has_beteiligungen_tables(con):
+    try:
+        con.execute("SELECT 1 FROM beteiligungen LIMIT 1")
+        con.execute("SELECT 1 FROM beteiligungen_kennzahlen LIMIT 1")
+        return True
+    except Exception:
+        return False
+
+
+def has_bilanz_tables(con):
+    try:
+        con.execute("SELECT 1 FROM bilanz_positionen LIMIT 1")
+        return True
+    except Exception:
+        return False
+
+
 def resolve_ground_truth(year, kk_nr, db_summe):
     if year in GROUND_TRUTH and kk_nr in GROUND_TRUTH[year]:
         return GROUND_TRUTH[year][kk_nr], True
@@ -313,6 +367,43 @@ def detect_stellenplan(text):
 def detect_hsk(text):
     t = text.lower()
     return any(kw in t for kw in HSK_KEYWORDS)
+
+
+def detect_personalausgaben(text):
+    t = text.lower()
+    return any(kw in t for kw in PERSONALAUSGABEN_KEYWORDS)
+
+
+def detect_beteiligungen(text, con):
+    """Matcht auf generische Beteiligungs-Keywords ODER auf ein bekanntes
+    Firmenkuerzel/-namensfragment aus der beteiligungen-Tabelle."""
+    t = text.lower()
+    if any(kw in t for kw in BETEILIGUNG_KEYWORDS):
+        return True, None
+    try:
+        rows = con.execute("SELECT kuerzel, name FROM beteiligungen").fetchall()
+    except Exception:
+        return False, None
+    for r in rows:
+        kuerzel = (r["kuerzel"] or "").lower()
+        name = (r["name"] or "").lower()
+        if kuerzel and kuerzel == "stadt":
+            continue
+        if kuerzel and kuerzel in t:
+            return True, r["kuerzel"]
+        # erstes Wort des Firmennamens (z.B. "Suhler" aus "Suhler Stadtbetrieb GmbH")
+        first_word = name.split()[0] if name else ""
+        if len(first_word) >= 4 and first_word in t:
+            return True, r["kuerzel"]
+    return False, None
+
+
+def detect_bilanz(text):
+    t = text.lower()
+    for kw, suchbegriff in BILANZ_KEYWORDS.items():
+        if kw in t:
+            return True, suchbegriff
+    return False, None
 
 
 # ── Query-Funktionen ──────────────────────────────────────────────────────────
@@ -598,6 +689,158 @@ def query_hsk_massnahmen(con, suchbegriff=None, tp_nrs=None, kategorie=None, sta
     """, (*params, limit)).fetchall()
 
     return [dict(r) for r in rows]
+
+
+# Personalausgaben-Kontengruppen (portiert aus generate_json.py::make_personal)
+PERSONAL_GRUPPEN_LABELS = {
+    "bez_beamte":  "Dienstbezüge Beamte",
+    "bez_tarif":   "Dienstbezüge Tarifbeschäftigte",
+    "vers_beamte": "Versorgungskasse Beamte",
+    "vers_tarif":  "Versorgungskasse Tarif",
+    "sv":          "Sozialversicherung",
+    "beihilfen":   "Beihilfen & Unterstützungen",
+    "sonstiges":   "Nebenkosten & Rückstellungen",
+}
+
+
+def _personal_konto_gruppe(konto_nr):
+    p = konto_nr[:4]
+    if p == "5021":                        return "bez_beamte"
+    if p in ("5022", "5023", "5024", "5029"): return "bez_tarif"
+    if p == "5031":                        return "vers_beamte"
+    if p in ("5032", "5039"):              return "vers_tarif"
+    if p in ("5042", "5043", "5049"):      return "sv"
+    if p in ("5051", "5052"):              return "beihilfen"
+    return "sonstiges"
+
+
+def query_personalausgaben(con, year, wert_typ=None, tp_nrs=None):
+    """Personalaufwand (Konten 501xxxx-507xxxx, KK5) mit Kontengruppen-Aufschlüsselung."""
+    if wert_typ is None:
+        wert_typ = get_best_wert_typ(year, con)
+
+    where = ("WHERE h.daten_jahr=? AND h.wert_typ=? AND ("
+             "k.konto_nummer LIKE '501%' OR k.konto_nummer LIKE '502%' OR "
+             "k.konto_nummer LIKE '503%' OR k.konto_nummer LIKE '504%' OR "
+             "k.konto_nummer LIKE '505%' OR k.konto_nummer LIKE '506%' OR "
+             "k.konto_nummer LIKE '507%')")
+    params = [year, wert_typ]
+    if tp_nrs:
+        ph = ",".join("?" * len(tp_nrs))
+        where += f" AND t.nummer IN ({ph})"
+        params.extend(tp_nrs)
+
+    rows = con.execute(f"""
+        SELECT k.konto_nummer, SUM(h.betrag) AS betrag
+        FROM haushaltswerte h
+        JOIN produkte p    ON h.produkt_id = p.id
+        JOIN teilplaene t  ON p.teilplan_id = t.id
+        JOIN konten k      ON h.konto_id = k.id
+        {where}
+        GROUP BY k.konto_nummer
+    """, params).fetchall()
+
+    by_gruppe = {g: 0.0 for g in PERSONAL_GRUPPEN_LABELS}
+    for r in rows:
+        by_gruppe[_personal_konto_gruppe(r["konto_nummer"])] += (r["betrag"] or 0.0)
+    gesamt = sum(by_gruppe.values())
+
+    kk5_join = ("FROM haushaltswerte h JOIN konten k ON h.konto_id=k.id "
+                "JOIN kontenklassen kk ON k.kontenklasse_id=kk.id")
+    kk5_where = "WHERE kk.nummer=5 AND h.daten_jahr=? AND h.wert_typ=?"
+    kk5_params = [year, wert_typ]
+    if tp_nrs:
+        kk5_join += " JOIN produkte p2 ON h.produkt_id=p2.id JOIN teilplaene t2 ON p2.teilplan_id=t2.id"
+        ph = ",".join("?" * len(tp_nrs))
+        kk5_where += f" AND t2.nummer IN ({ph})"
+        kk5_params.extend(tp_nrs)
+    total_kk5 = con.execute(
+        f"SELECT COALESCE(SUM(h.betrag),0) {kk5_join} {kk5_where}", kk5_params
+    ).fetchone()[0]
+    personalquote_pct = round(gesamt / total_kk5 * 100, 1) if total_kk5 else None
+
+    return {
+        "year": year, "wert_typ": wert_typ, "tp_nrs": tp_nrs,
+        "gesamt": gesamt, "kk5_gesamt": total_kk5,
+        "personalquote_pct": personalquote_pct,
+        "by_gruppe": [
+            {"code": g, "label": PERSONAL_GRUPPEN_LABELS[g], "betrag": by_gruppe[g]}
+            for g in PERSONAL_GRUPPEN_LABELS
+        ],
+    }
+
+
+def query_beteiligungen(con, jahr=None, kuerzel_filter=None):
+    """Kennzahlen der staedtischen Beteiligungen (Gesellschaften)."""
+    if kuerzel_filter:
+        b = con.execute(
+            "SELECT id, kuerzel, name, typ FROM beteiligungen WHERE kuerzel=?",
+            (kuerzel_filter,)
+        ).fetchone()
+        if not b:
+            return {"mode": "einzelfirma", "firma": None, "jahre": []}
+        rows = con.execute("""
+            SELECT jahr, umsatz_teur, jahresergebnis_teur, jahresergebnis_nach_eav_teur,
+                   bilanzsumme_teur, eigenkapital_teur, mitarbeiter
+            FROM beteiligungen_kennzahlen
+            WHERE beteiligung_id=?
+            ORDER BY jahr
+        """, (b["id"],)).fetchall()
+        return {"mode": "einzelfirma", "firma": dict(b), "jahre": [dict(r) for r in rows]}
+
+    if jahr:
+        rows = con.execute("""
+            SELECT b.kuerzel, b.name, k.jahr, k.umsatz_teur, k.jahresergebnis_teur,
+                   k.jahresergebnis_nach_eav_teur, k.mitarbeiter
+            FROM beteiligungen_kennzahlen k
+            JOIN beteiligungen b ON k.beteiligung_id = b.id
+            WHERE k.jahr = ?
+            ORDER BY k.jahresergebnis_teur DESC
+        """, (jahr,)).fetchall()
+    else:
+        # Neuestes verfuegbares Jahr je Firma (nicht alle melden jedes Jahr vollstaendig)
+        rows = con.execute("""
+            SELECT b.kuerzel, b.name, k.jahr, k.umsatz_teur, k.jahresergebnis_teur,
+                   k.jahresergebnis_nach_eav_teur, k.mitarbeiter
+            FROM beteiligungen_kennzahlen k
+            JOIN beteiligungen b ON k.beteiligung_id = b.id
+            JOIN (
+                SELECT beteiligung_id, MAX(jahr) AS max_jahr
+                FROM beteiligungen_kennzahlen GROUP BY beteiligung_id
+            ) m ON k.beteiligung_id = m.beteiligung_id AND k.jahr = m.max_jahr
+            ORDER BY k.jahresergebnis_teur DESC
+        """).fetchall()
+
+    return {"mode": "uebersicht", "jahr": jahr, "firmen": [dict(r) for r in rows]}
+
+
+def query_bilanz_position(con, suchbegriff=None, jahr=None):
+    """Bilanzpositionen suchen (z.B. Rueckstellungen) oder Ebene-1-Uebersicht anzeigen."""
+    if suchbegriff:
+        where = "WHERE LOWER(bezeichnung) LIKE ?"
+        params = [f"%{suchbegriff.lower()}%"]
+        if jahr:
+            where += " AND daten_jahr=?"
+            params.append(jahr)
+        rows = con.execute(f"""
+            SELECT daten_jahr, seite, position_code, bezeichnung, ebene, betrag
+            FROM bilanz_positionen
+            {where}
+            ORDER BY daten_jahr, seite, position_code
+        """, params).fetchall()
+        return {"mode": "suche", "suchbegriff": suchbegriff, "rows": [dict(r) for r in rows]}
+
+    if jahr is None:
+        r = con.execute("SELECT MAX(daten_jahr) FROM bilanz_positionen").fetchone()
+        jahr = r[0] if r else None
+
+    rows = con.execute("""
+        SELECT daten_jahr, seite, position_code, bezeichnung, ebene, betrag
+        FROM bilanz_positionen
+        WHERE ebene=1 AND daten_jahr=?
+        ORDER BY seite, position_code
+    """, (jahr,)).fetchall()
+    return {"mode": "uebersicht", "jahr": jahr, "rows": [dict(r) for r in rows]}
 
 
 # ── Output-Formatter ──────────────────────────────────────────────────────────
@@ -982,6 +1225,160 @@ def format_hsk_massnahmen(massnahmen, query_text, tp_nrs=None, status_filter=Non
     return "\n".join(lines)
 
 
+def format_personalausgaben(data, query_text):
+    year, wt = data["year"], data["wert_typ"]
+    scope = f" — Teilplan {'/'.join(data['tp_nrs'])}" if data.get("tp_nrs") else ""
+    pct = data["personalquote_pct"]
+    pct_str = f"{pct:.1f}%".replace(".", ",") if pct is not None else "—"
+
+    lines = [
+        f"Anfrage: {query_text}", "",
+        f"Personalausgaben Stadt Suhl {year} ({_wt_label(wt)}){scope}",
+        _hr(), "",
+        f"  Gesamt Personalaufwand:      {fmt_eur(data['gesamt']):>16}",
+        f"  Personalquote (Anteil KK5):  {pct_str:>16}",
+        "",
+        f"  {'Kontengruppe':<32} {'Betrag':>18}",
+        f"  {'─'*52}",
+    ]
+    for g in data["by_gruppe"]:
+        lines.append(f"  {g['label']:<32} {fmt_eur(g['betrag']):>18}")
+
+    return "\n".join(lines)
+
+
+def format_personalausgaben_vergleich(data_a, data_b, query_text):
+    ya, yb = data_a["year"], data_b["year"]
+
+    lines = [
+        f"Anfrage: {query_text}", "",
+        f"Personalausgaben Stadt Suhl — {ya} vs. {yb}",
+        _hr(), "",
+        f"  {'Kennzahl':<32} {str(ya):>16} {str(yb):>16} {'Veraenderung':>20}",
+        f"  {'─'*88}",
+        f"  {'Gesamt Personalaufwand':<32} {fmt_eur(data_a['gesamt']):>16} "
+        f"{fmt_eur(data_b['gesamt']):>16} {fmt_diff(data_a['gesamt'], data_b['gesamt']):>20}",
+    ]
+    ga_by = {g["code"]: g for g in data_a["by_gruppe"]}
+    gb_by = {g["code"]: g for g in data_b["by_gruppe"]}
+    lines += ["", f"  {'Kontengruppe':<32} {str(ya):>16} {str(yb):>16} {'Veraenderung':>20}", f"  {'─'*88}"]
+    for code, label in PERSONAL_GRUPPEN_LABELS.items():
+        va = ga_by.get(code, {}).get("betrag", 0)
+        vb = gb_by.get(code, {}).get("betrag", 0)
+        lines.append(f"  {label:<32} {fmt_eur(va):>16} {fmt_eur(vb):>16} {fmt_diff(va, vb):>20}")
+
+    return "\n".join(lines)
+
+
+def format_beteiligungen(data, query_text):
+    if data["mode"] == "einzelfirma":
+        firma = data["firma"]
+        if not firma:
+            return f"Anfrage: {query_text}\n\nKeine Beteiligung mit diesem Namen gefunden."
+
+        lines = [
+            f"Anfrage: {query_text}", "",
+            f"Beteiligung: {firma['name']} ({firma['kuerzel']}, {firma['typ']})",
+            _hr(), "",
+        ]
+        if not data["jahre"]:
+            lines.append("  Keine Kennzahlen vorhanden.")
+            return "\n".join(lines)
+
+        lines += [
+            f"  {'Jahr':<6} {'Umsatz':>14} {'Jahresergebnis':>16} {'n. EAV':>14} {'Mitarbeiter':>12}",
+            f"  {'─'*66}",
+        ]
+        for j in data["jahre"]:
+            umsatz = f"{j['umsatz_teur']:.0f} T€" if j["umsatz_teur"] is not None else "—"
+            erg = f"{j['jahresergebnis_teur']:.0f} T€" if j["jahresergebnis_teur"] is not None else "—"
+            nach_eav = f"{j['jahresergebnis_nach_eav_teur']:.0f} T€" if j["jahresergebnis_nach_eav_teur"] is not None else "—"
+            ma = str(j["mitarbeiter"]) if j["mitarbeiter"] is not None else "—"
+            lines.append(f"  {j['jahr']:<6} {umsatz:>14} {erg:>16} {nach_eav:>14} {ma:>12}")
+        return "\n".join(lines)
+
+    # Uebersicht ueber alle Firmen
+    firmen = data["firmen"]
+    jahr_label = str(data["jahr"]) if data["jahr"] else "je Firma neuestes verfuegbares Jahr"
+    lines = [
+        f"Anfrage: {query_text}", "",
+        f"Beteiligungen Stadt Suhl — Jahresergebnisse ({jahr_label})",
+        _hr(), "",
+    ]
+    if not firmen:
+        lines.append("  Keine Daten gefunden.")
+        return "\n".join(lines)
+
+    lines += [
+        f"  {'Firma':<38} {'Jahr':>6} {'Umsatz':>12} {'Jahresergebnis':>16}",
+        f"  {'─'*74}",
+    ]
+    for f in firmen:
+        name = f["name"] if len(f["name"]) <= 37 else f["name"][:36] + "…"
+        umsatz = f"{f['umsatz_teur']:.0f} T€" if f["umsatz_teur"] is not None else "—"
+        erg = f"{f['jahresergebnis_teur']:.0f} T€" if f["jahresergebnis_teur"] is not None else "—"
+        lines.append(f"  {name:<38} {f['jahr']:>6} {umsatz:>12} {erg:>16}")
+
+    gewinner = [f for f in firmen if (f["jahresergebnis_teur"] or 0) > 0]
+    verlierer = [f for f in firmen if (f["jahresergebnis_teur"] or 0) < 0]
+    lines += [
+        "",
+        f"  {len(gewinner)} Gesellschaften mit positivem, {len(verlierer)} mit negativem Jahresergebnis.",
+    ]
+    return "\n".join(lines)
+
+
+def format_bilanz_position(data, query_text):
+    if data["mode"] == "suche":
+        rows = data["rows"]
+        lines = [
+            f"Anfrage: {query_text}", "",
+            f"Bilanzpositionen — Suche: '{data['suchbegriff']}'",
+            _hr(), "",
+        ]
+        if not rows:
+            lines.append("  Keine Bilanzpositionen gefunden. Bilanzdaten liegen nur fuer 2020/2021 vor.")
+            return "\n".join(lines)
+
+        lines += [
+            f"  {'Jahr':<6} {'Seite':<8} {'Code':<7} {'Bezeichnung':<42} {'Betrag':>16}",
+            f"  {'─'*82}",
+        ]
+        for r in rows:
+            einzug = "  " * (r["ebene"] - 1)
+            name = einzug + r["bezeichnung"]
+            if len(name) > 42:
+                name = name[:41] + "…"
+            lines.append(
+                f"  {r['daten_jahr']:<6} {r['seite']:<8} {r['position_code']:<7} "
+                f"{name:<42} {fmt_eur(r['betrag']):>16}"
+            )
+        return "\n".join(lines)
+
+    # Uebersicht (Ebene-1-Hauptkategorien eines Jahres)
+    rows = data["rows"]
+    jahr = data["jahr"]
+    lines = [
+        f"Anfrage: {query_text}", "",
+        f"Bilanzuebersicht Stadt Suhl — {jahr}" if jahr else "Bilanzuebersicht Stadt Suhl",
+        _hr(), "",
+    ]
+    if not rows:
+        lines.append("  Keine Bilanzdaten vorhanden. Bilanzdaten liegen nur fuer 2020/2021 vor.")
+        return "\n".join(lines)
+
+    for seite in ("AKTIVA", "PASSIVA"):
+        seite_rows = [r for r in rows if r["seite"] == seite]
+        if not seite_rows:
+            continue
+        lines.append(f"  {seite}:")
+        for r in seite_rows:
+            lines.append(f"    {r['position_code']:<5} {r['bezeichnung']:<40} {fmt_eur(r['betrag']):>18}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 def format_verfuegbare_jahre(con, query_text):
     years = get_available_years(con)
     lines = [f'Anfrage: {query_text}', "", "Verfuegbare Haushaltsdaten — Stadt Suhl", _hr(), ""]
@@ -1028,6 +1425,24 @@ Haushaltssicherungskonzept (HSK):
   "HSK Massnahmen aktiv"
   "HSK Massnahmen Aufwand"
   "HSK Massnahmen Kultur"
+
+Personalausgaben (Personalkosten in €, nicht Stellenanzahl):
+  "Finde alle Personalausgaben 2025"
+  "Personalkosten 2023 vs 2025"
+  "Wie hoch ist die Personalquote 2025?"
+  "Dienstbezüge im Sozialdezernat 2025"
+
+Beteiligungen (städtische Gesellschaften):
+  "Welche Gewinne erwirtschaften die Beteiligungen?"
+  "Beteiligungen Übersicht 2024"
+  "Wie hat sich die GEWO entwickelt?"
+  "Jahresergebnis SWSZ"
+
+Bilanz (nur 2020/2021 verfügbar):
+  "Gibt es Rückstellungen?"
+  "Wie hoch sind die Verbindlichkeiten?"
+  "Bilanzübersicht 2021"
+  "Eigenkapital der Stadt"
 """.format(q=query_text)
 
 
@@ -1107,6 +1522,47 @@ def dispatch(query_text, json_mode, con):
                 return {"type": "stellenplan_leer", "text": text}, None
             text = format_stellenplan(data, query_text)
             return {"type": "stellenplan", "data": data, "text": text}, None
+
+    # Personalausgaben (Personalkosten in €) — eigener Branch VOR dem generischen
+    # Teilplan-Fallback, damit "Personalausgaben 2025" nicht in den generischen
+    # Teilplan-Pfad laeuft. Zusaetzlich: TP-Erkennung fuer diesen Branch auf dem
+    # von PERSONALAUSGABEN_KEYWORDS bereinigten Text, da "personal" sonst als
+    # Teilstring von "personalausgaben"/"personalkosten" faelschlich TP03
+    # (Personal/Zentrale Dienste) triggert (der globale tp_nrs waere hier falsch)
+    if detect_personalausgaben(query_text):
+        t_clean = t
+        for kw in PERSONALAUSGABEN_KEYWORDS:
+            t_clean = t_clean.replace(kw, " ")
+        pa_tp_nrs = detect_teilplaene(t_clean)
+
+        if is_comparison and len(years) >= 2:
+            ya, yb = years[0], years[-1]
+            data_a = query_personalausgaben(con, ya, tp_nrs=pa_tp_nrs or None)
+            data_b = query_personalausgaben(con, yb, tp_nrs=pa_tp_nrs or None)
+            text = format_personalausgaben_vergleich(data_a, data_b, query_text)
+            return {"type": "personalausgaben_vergleich", "text": text,
+                    "data": {"a": data_a, "b": data_b}}, None
+        else:
+            pa_year = years[0] if years else get_default_year(con)
+            data = query_personalausgaben(con, pa_year, tp_nrs=pa_tp_nrs or None)
+            text = format_personalausgaben(data, query_text)
+            return {"type": "personalausgaben", "data": data, "text": text}, None
+
+    # Beteiligungen (staedtische Gesellschaften)
+    bet_match, bet_kuerzel = detect_beteiligungen(query_text, con)
+    if bet_match and has_beteiligungen_tables(con):
+        bet_year = years[0] if (years and not bet_kuerzel) else None
+        data = query_beteiligungen(con, bet_year, bet_kuerzel)
+        text = format_beteiligungen(data, query_text)
+        return {"type": "beteiligungen", "data": data, "text": text}, None
+
+    # Bilanz / Rueckstellungen
+    bilanz_match, bilanz_suchbegriff = detect_bilanz(query_text)
+    if bilanz_match and has_bilanz_tables(con):
+        bil_year = years[0] if years else None
+        data = query_bilanz_position(con, bilanz_suchbegriff, bil_year)
+        text = format_bilanz_position(data, query_text)
+        return {"type": "bilanz", "data": data, "text": text}, None
 
     # Jahresvergleich (Finanz)
     if is_comparison and len(years) >= 2:

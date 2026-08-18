@@ -30,7 +30,8 @@ natürlichsprachiger Anfrage abfragen können. Parallel dazu gibt es ein
 | Simulator-Integration | ✅ fertig | Stufe A+B+C |
 | Orsi-Skill (Haushalt) | ✅ fertig | budget_query.py auf Elestio |
 | Orsi-Skill (Stellenplan) | ✅ fertig | detect_stellenplan() in budget_query.py |
-| Orsi-Skill (HSK) | ❌ offen | DB hochladen + Skill erweitern |
+| Orsi-Skill (HSK) | ✅ fertig | detect_hsk() implementiert, DB + Skill auf Elestio deployed (2026-08-05) |
+| Orsi-Skill (Personalausgaben/Beteiligungen/Bilanz) | ✅ fertig | detect_personalausgaben/-beteiligungen/-bilanz auf Elestio deployed (2026-08-05) |
 | Stellenplan 2023 | ❌ offen | Erfordert HH-Plan 2024 PDF |
 | Zielerreichungsquote (HSK) | ❌ offen | Stufe 3 noch nicht implementiert |
 
@@ -248,8 +249,11 @@ DB-Pfad: /opt/omni-haushalt/suhl_haushalt.db
 Skill:   /opt/app/skills/budget-skill/budget_query.py
 ```
 
-**Aktueller Stand auf Server:** Haushaltsdaten 2023–2025 + Stellenplan ✅
-**Fehlt auf Server:** HSK-Tabellen (hsk_massnahmen, hsk_jahreswerte, hsk_massnahmen_produkte, hsk_abgleich VIEW)
+**Aktueller Stand auf Server (Stand 2026-08-05):** Vollständige lokale DB hochgeladen —
+Haushaltsdaten 2023–2025, Stellenplan, HSK-Tabellen, Beteiligungen, Bilanz-Positionen,
+Schuldenentwicklung, Zweckverbände ✅. Skill unterstützt Haushalt, Stellenplan, HSK,
+Personalausgaben, Beteiligungen, Bilanz/Rückstellungen — getestet direkt im
+Docker-Container (`app-openclaw-gateway-1`, Skill-Pfad im Container: `/app/skills/budget-skill/budget_query.py`).
 
 ### Server-Update-Prozedur (nach lokalen DB-Änderungen)
 
@@ -267,34 +271,46 @@ scp -i "C:/Users/Tobias/.ssh/ssh-key.txt" \
   skill/budget_query.py \
   root@ssp-framework-2-u68900.vm.elestio.app:/opt/app/skills/budget-skill/budget_query.py
 
-# 4. Testen
+# 3b. SKILL.md hochladen (IMMER wenn budget_query.py um neue Fragetypen erweitert
+#     wurde — sonst "kennt" Orsi die neue Faehigkeit nicht, siehe unten)
+scp -i "C:/Users/Tobias/.ssh/ssh-key.txt" \
+  skill/SKILL.md \
+  root@ssp-framework-2-u68900.vm.elestio.app:/opt/app/skills/budget-skill/SKILL.md
+
+# 4. Testen — im Docker-Container, denn dort (nicht auf dem Host) liegt der
+#    Skill-Pfad, den Orsi tatsaechlich ausfuehrt: /app/skills/budget-skill/
 ssh -i "C:/Users/Tobias/.ssh/ssh-key.txt" root@ssp-framework-2-u68900.vm.elestio.app
-export BUDGET_DB_PATH=/opt/omni-haushalt/suhl_haushalt.db
-python3 /opt/app/skills/budget-skill/budget_query.py "Gesamtaufwendungen 2025"
-python3 /opt/app/skills/budget-skill/budget_query.py "Wie viele Stellen hat TP 09?"
+docker exec app-openclaw-gateway-1 sh -c '
+  export BUDGET_DB_PATH=/opt/omni-haushalt/suhl_haushalt.db
+  python3 /app/skills/budget-skill/budget_query.py "Gesamtaufwendungen 2025"
+  python3 /app/skills/budget-skill/budget_query.py "Wie viele Stellen hat TP 09?"
+'
 ```
+
+### Wie Orsi von seinen Fähigkeiten erfährt
+
+Jeder Skill im Container hat eine `SKILL.md` (`/app/skills/<name>/SKILL.md`,
+lokal versioniert unter `skill/SKILL.md`). Das YAML-Frontmatter-Feld
+`description` ist der Text, anhand dessen Orsi entscheidet, *ob* es einen
+Skill für eine Nutzerfrage überhaupt in Betracht zieht — es gibt kein
+zentrales Skill-Register, die Discovery läuft rein über diese Datei pro
+Ordner. **Folge:** Wird `budget_query.py` um neue Fragetypen erweitert, ohne
+`SKILL.md` (Frontmatter-`description` + Befehle-Abschnitt) mitzupflegen und
+hochzuladen, kann Orsi die neue Fähigkeit im Zweifel nicht zuordnen, selbst
+wenn das Skript sie technisch korrekt beantworten würde. Immer beide Dateien
+gemeinsam aktualisieren und hochladen (Schritt 3 + 3b oben).
 
 ---
 
 ## Offene Punkte (priorisiert)
 
-### 🔴 Hoch — Server-Update (Elestio)
+### ✅ ERLEDIGT (2026-08-05) — Server-Update + Orsi-Skill-Erweiterung
 
-Die lokale DB enthält HSK-Daten die auf dem Server fehlen. Bis zum Upload
-kann Orsi keine HSK-Fragen beantworten.
-
-**Aufgabe:** `suhl_haushalt.db` via `scp` hochladen (siehe Server-Update-Prozedur).
-
-### 🔴 Hoch — Orsi-Skill HSK-Erweiterung
-
-`skill/budget_query.py` unterstützt Haushalt + Stellenplan, aber noch kein HSK.
-
-**Aufgabe:** Funktionen ergänzen:
-- `detect_hsk(query)` → erkennt HSK-Anfragen
-- `query_hsk_massnahmen(...)` → sucht nach Maßnahmen
-- `format_hsk(...)` → formatiert Ergebnis
-- Beispiel-Anfragen: `"Welche HSK-Maßnahmen gibt es für Soziales?"`,
-  `"Wie viel hat Suhl durch das HSK gespart?"`, `"Was sind die aktivsten Konsolidierungsmaßnahmen?"`
+DB (inkl. HSK, Beteiligungen, Bilanz-Positionen) und `skill/budget_query.py`
+sind auf Elestio hochgeladen und live getestet. Orsi beantwortet jetzt auch:
+`detect_personalausgaben` (Personalkosten/-quote), `detect_beteiligungen`
+(Gewinne/Kennzahlen der 15 städtischen Gesellschaften), `detect_bilanz`
+(Rückstellungen/Verbindlichkeiten/Bilanzübersicht — Daten nur 2020/2021).
 
 ### 🟡 Mittel — Stellenplan 2023
 
@@ -409,8 +425,10 @@ Jahresergebnis (Soll): **−1.607.940 €** (geplantes Defizit)
 | Steuerung | "Welche Ausgaben sind Pflicht?" |
 | Stellenplan | "Wie viele Stellen hat TP 09?" |
 | Stellenplan | "Beamtenstruktur Personal 2024 vs 2025" |
-
-**Noch nicht unterstützt:** HSK-Abfragen (Blocker: DB-Upload + Skill-Erweiterung)
+| HSK | "Wie viel hat Suhl durch das HSK gespart?" |
+| Personalausgaben | "Finde alle Personalausgaben 2025" / "Personalkosten 2023 vs 2025" |
+| Beteiligungen | "Welche Gewinne erwirtschaften die Beteiligungen?" / "Wie hat sich die GEWO entwickelt?" |
+| Bilanz | "Gibt es Rückstellungen?" / "Bilanzübersicht 2021" (Daten nur 2020/2021) |
 
 ---
 

@@ -1,0 +1,2 @@
+# Keine externen Pakete nötig — nur Python-stdlib + sqlite3 (built-in)
+# Python >= 3.8 erforderlich
