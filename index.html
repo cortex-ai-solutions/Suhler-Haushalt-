@@ -3876,7 +3876,7 @@ function buildJVKontenHTML(pnr, tpNr) {
     const dc   = kd > 0 ? "text-rose-400" : kd < 0 ? "text-emerald-400" : "text-slate-500";
     return `<tr class="hover:bg-slate-700/30 text-xs">
       <td class="py-0.5 pr-2 font-mono text-slate-500 whitespace-nowrap">${escHtml(k.knr)}</td>
-      <td class="py-0.5 pr-3 text-slate-400" colspan="2">${escHtml(k.bez)}</td>
+      <td class="py-0.5 pr-3 text-slate-400" colspan="2" title="${escHtml(k.bez)}">${escHtml(k.bez)}</td>
       <td class="py-0.5 text-right pr-2 font-mono text-slate-400">${vA ? fmtEur(vA) : "–"}</td>
       <td class="py-0.5 text-right pr-2 font-mono text-slate-400">${vB ? fmtEur(vB) : "–"}</td>
       <td class="py-0.5 text-right pr-2 font-mono ${dc}">${kd && kd !== 0 ? (kd > 0 ? "+" : "") + fmtMio(kd) : "–"}</td>
@@ -4074,7 +4074,7 @@ function renderDetailProdukte() {
       const isMz = merkzettel.some(m => m.pnr === p.pnr && m.knr === k.knr);
       return "<tr class='text-xs hover:bg-slate-700/20'>" +
         "<td class='py-1 pr-3 font-mono text-slate-500 whitespace-nowrap'>" + hl(k.knr,search) + "</td>" +
-        "<td class='py-1 pr-4 text-slate-300 leading-tight'>" + hl(k.bez,search) + "</td>" +
+        "<td class='py-1 pr-4 text-slate-300 leading-tight' title='" + escHtml(k.bez) + "'>" + hl(k.bez,search) + "</td>" +
         "<td class='py-1 text-right font-mono whitespace-nowrap'>" + valStr + "</td>" +
         "<td class='py-1 pl-2'><button onclick=\"toggleMzItem('" + p.pnr + "','" + k.knr + "')\" "
           + "title='" + (isMz ? 'Vom Merkzettel entfernen' : 'Zum Merkzettel hinzuf\u00fcgen') + "' "
