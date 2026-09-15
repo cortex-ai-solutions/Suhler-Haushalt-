@@ -3508,15 +3508,20 @@ function openDrillDown(tpNr, skFilter) {
   const tp = getYD().teilplaene.find(t => t.tp_nr === tpNr);
   if (!tp) return;
 
-  // Produkte filtern und sortieren (immer 2025-Basis)
+  // simulator_produkte hat nur kk5_2024/2025/2026; fuer aeltere Jahre wird
+  // 2024 als bestverfuegbare Naeherung angezeigt (mit Hinweis unten).
+  const budget = p => getKK5(p, activeJahr);
+  const budgetJahrAnzeige = activeJahr < 2024 ? 2024 : activeJahr;
+
+  // Produkte filtern und sortieren (Budget des aktiven Haushaltsjahres)
   let produkte = (DATA.simulator_produkte || []).filter(p => p.tp_nr === tpNr);
   if (skFilter) produkte = produkte.filter(p => p.steuerungs_code === skFilter);
-  const mitBudget  = produkte.filter(p => p.kk5_2026 > 0).sort((a, b) => b.kk5_2026 - a.kk5_2026);
-  const ohneBudget = produkte.filter(p => p.kk5_2026 <= 0).sort((a, b) => a.bezeichnung.localeCompare(b.bezeichnung));
+  const mitBudget  = produkte.filter(p => budget(p) > 0).sort((a, b) => budget(b) - budget(a));
+  const ohneBudget = produkte.filter(p => budget(p) <= 0).sort((a, b) => a.bezeichnung.localeCompare(b.bezeichnung));
   const gezeigt    = [...mitBudget, ...ohneBudget];
 
-  const totalBudget = mitBudget.reduce((s, p) => s + p.kk5_2026, 0);
-  const maxBudget   = mitBudget.length > 0 ? mitBudget[0].kk5_2026 : 1;
+  const totalBudget = mitBudget.reduce((s, p) => s + budget(p), 0);
+  const maxBudget   = mitBudget.length > 0 ? budget(mitBudget[0]) : 1;
 
   // Titel & Subtitle
   document.getElementById("dd-title").textContent = tp.tp_name;
@@ -3541,8 +3546,8 @@ function openDrillDown(tpNr, skFilter) {
     skBreakdown || `${mitBudget.length} Produkte mit Budget · ${fmtMio(totalBudget)}`;
 
   // Tabelle aufbauen
-  const budgetJahrLabel = activeJahr !== 2025
-    ? `<div class="mb-2 text-xs text-amber-500">Produktliste & Budget: Ansatz 2025 (kein 2024-Produktexport)</div>`
+  const budgetJahrLabel = activeJahr < 2024
+    ? `<div class="mb-2 text-xs text-amber-500">Produktliste & Budget: Ansatz ${budgetJahrAnzeige} (kein ${activeJahr}-Produktexport)</div>`
     : "";
   let html = budgetJahrLabel + `<table class="w-full text-sm">
     <thead class="text-left text-slate-400">
@@ -3550,21 +3555,21 @@ function openDrillDown(tpNr, skFilter) {
         <th class="pr-3 font-medium">Nr.</th>
         <th class="pr-3 font-medium">Bezeichnung</th>
         <th class="pr-3 font-medium">Typ</th>
-        <th class="text-right font-medium">Budget 2025</th>
+        <th class="text-right font-medium">Budget ${budgetJahrAnzeige}</th>
         <th class="pl-4 w-24"></th>
       </tr>
     </thead>
     <tbody>`;
 
   gezeigt.forEach(p => {
-    const hatBudget = p.kk5_2026 > 0;
-    const barW      = hatBudget ? Math.round((p.kk5_2026 / maxBudget) * 80) : 0;
+    const hatBudget = budget(p) > 0;
+    const barW      = hatBudget ? Math.round((budget(p) / maxBudget) * 80) : 0;
     const dimmed    = hatBudget ? "" : " opacity-40";
     html += `<tr class="${dimmed}">
       <td class="pr-3 text-slate-500 font-mono text-xs align-middle" style="white-space:nowrap">${escHtml(p.produkt_nummer)}</td>
       <td class="pr-3 text-slate-200 align-middle">${escHtml(p.bezeichnung)}</td>
       <td class="pr-3 align-middle"><span class="tag ${skTagClass(p.steuerungs_code)}">${SK_LABEL[p.steuerungs_code] || p.steuerungs_code}</span></td>
-      <td class="text-right align-middle font-mono text-slate-300" style="white-space:nowrap">${hatBudget ? fmtMio(p.kk5_2026) : "–"}</td>
+      <td class="text-right align-middle font-mono text-slate-300" style="white-space:nowrap">${hatBudget ? fmtMio(budget(p)) : "–"}</td>
       <td class="pl-4 align-middle">
         ${hatBudget ? `<span class="bar-mini" style="width:${barW}px;opacity:0.7;"></span>` : ""}
       </td>
@@ -3674,7 +3679,7 @@ function jvShortTP(n) {
 
 function getKK5(p, jahr) {
   if (jahr === 2026) return p.kk5_2026 || 0;
-  if (jahr === 2025) return p.kk5_2026 || 0;
+  if (jahr === 2025) return p.kk5_2025 || 0;
   return p.kk5_2024 || 0;
 }
 
