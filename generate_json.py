@@ -15,6 +15,8 @@ GT_BY_YEAR = {
     2024: {"ertraege": 130_353_020.00, "aufwendungen": 133_802_080.00, "ergebnis": -3_449_060.00},
     2025: {"ertraege": 136_395_290.00, "aufwendungen": 138_003_230.00, "ergebnis": -1_607_940.00,
            "einzahlungen": 136_365_830.00, "auszahlungen": 135_802_480.00},
+    2026: {"ertraege": 141_952_900.00, "aufwendungen": 144_971_430.00, "ergebnis": -3_018_530.00,
+           "einzahlungen": 135_116_810.00, "auszahlungen": 134_286_770.00},
 }
 
 # Lesbare Produktnamen nach Thueringer Produktrahmen
@@ -461,7 +463,7 @@ def make_details_tp(con):
                 FROM haushaltswerte h
                 JOIN konten k ON h.konto_id = k.id
                 JOIN kontenklassen kk ON k.kontenklasse_id = kk.id
-                WHERE h.produkt_id = ? AND h.daten_jahr IN (2023, 2024, 2025)
+                WHERE h.produkt_id = ? AND h.daten_jahr IN (2024, 2025, 2026)
                   AND h.wert_typ = 'PLAN_ANSATZ' AND kk.nummer IN (4, 5)
                 GROUP BY k.konto_nummer, h.daten_jahr
                 ORDER BY kk.nummer, k.konto_nummer
@@ -472,11 +474,11 @@ def make_details_tp(con):
                     konten_by_nr[knr] = {
                         "knr": knr, "bez": k["bezeichnung"],
                         "kk": k["kk_nr"],
-                        "b23": 0.0, "b24": 0.0, "b25": 0.0,
+                        "b24": 0.0, "b25": 0.0, "b26": 0.0,
                     }
                 konten_by_nr[knr][yr_key] = round(k["betrag"], 2)
             konten = [v for v in konten_by_nr.values()
-                      if v["b23"] or v["b24"] or v["b25"]]
+                      if v["b24"] or v["b25"] or v["b26"]]
             if not konten:
                 continue
             produkte.append({
@@ -504,7 +506,7 @@ def make_personal(con):
       beihilfen   : 5051xxx + 5052xxx – Beihilfen & Unterstützungen
       sonstiges   : 5062xxx + 5071xxx + 5013xxx + 5019xxx – Nebenkosten & Rückstellungen
     """
-    YEARS = [2023, 2024, 2025]
+    YEARS = [2024, 2025, 2026]
     WERT_TYP = "PLAN_ANSATZ"
 
     def konto_gruppe(konto_nr):
@@ -590,13 +592,13 @@ def make_personal(con):
             },
         }
 
-    # Personalquote-Zeitreihe 2021-2025 (IST für 2021-2023, Plan für 2024/2025)
+    # Personalquote-Zeitreihe 2022-2026 (IST für 2022-2024, Plan für 2025/2026)
     FULL_YEARS = [
-        (2021, "IST_ERGEBNIS", "Ist 2021",  False),
         (2022, "IST_ERGEBNIS", "Ist 2022",  False),
         (2023, "IST_ERGEBNIS", "Ist 2023",  False),
-        (2024, "PLAN_ANSATZ",  "Plan 2024", True),
+        (2024, "IST_ERGEBNIS", "Ist 2024",  False),
         (2025, "PLAN_ANSATZ",  "Plan 2025", True),
+        (2026, "PLAN_ANSATZ",  "Plan 2026", True),
     ]
     personalquote_zeitreihe = []
     for yr_f, wt_f, lbl_f, prog_f in FULL_YEARS:
@@ -736,7 +738,7 @@ def main():
 
     # ── by_year: pro Jahr meta + teilplaene + ertragsquellen ─────────────────
     by_year = {}
-    for yr in [2023, 2024, 2025]:
+    for yr in [2023, 2024, 2025, 2026]:
         by_year[str(yr)] = {
             "meta":          make_meta(con, yr),
             "teilplaene":    make_teilplaene(con, yr),
@@ -744,22 +746,24 @@ def main():
         }
     result["by_year"] = by_year
 
-    # Root-level zeigt auf 2025-Daten (rueckwaertskompatibel fuer Simulator etc.)
-    result["meta"]          = by_year["2025"]["meta"]
-    result["teilplaene"]    = by_year["2025"]["teilplaene"]
-    result["ertragsquellen"] = by_year["2025"]["ertragsquellen"]
+    # Root-level zeigt auf 2026-Daten (rueckwaertskompatibel fuer Simulator etc.)
+    # HH-Plan 2026 wurde vom Stadtrat beschlossen (2026-09) und ist damit der
+    # gueltige Haushalt; 2023-2025 bleiben als Vergleichsjahre in by_year erhalten.
+    result["meta"]          = by_year["2026"]["meta"]
+    result["teilplaene"]    = by_year["2026"]["teilplaene"]
+    result["ertragsquellen"] = by_year["2026"]["ertragsquellen"]
 
-    # ── Zeitreihe: 2023 PLAN aus 2023-ETL; IST-Werte aus 2025-ETL-Perspektive
+    # ── Zeitreihe: 2024 PLAN aus 2024-ETL; IST-Werte aus 2026-ETL-Perspektive
     jahre_zt = [
-        (2021, "IST_ERGEBNIS",   "Ist 2021",     False),
         (2022, "IST_ERGEBNIS",   "Ist 2022",     False),
-        (2023, "PLAN_ANSATZ",    "Ansatz 2023",  False),
         (2023, "IST_ERGEBNIS",   "Ist 2023",     False),
-        (2024, "ANSATZ_VORJAHR", "Ansatz 2024",  False),
-        (2025, "PLAN_ANSATZ",    "Ansatz 2025",  False),
-        (2026, "FINANZPLANUNG",  "Planung 2026", True),
+        (2024, "PLAN_ANSATZ",    "Ansatz 2024",  False),
+        (2024, "IST_ERGEBNIS",   "Ist 2024",     False),
+        (2025, "ANSATZ_VORJAHR", "Ansatz 2025",  False),
+        (2026, "PLAN_ANSATZ",    "Ansatz 2026",  False),
         (2027, "FINANZPLANUNG",  "Planung 2027", True),
         (2028, "FINANZPLANUNG",  "Planung 2028", True),
+        (2029, "FINANZPLANUNG",  "Planung 2029", True),
     ]
     result["zeitreihe"] = [
         {
@@ -772,7 +776,7 @@ def main():
         for j, t, lbl, prog in jahre_zt
     ]
 
-    # ── Simulator-Produkte (immer 2025-Basis) ────────────────────────────────
+    # ── Simulator-Produkte (immer aktuelle HH-Plan-Basis, jetzt 2026) ────────
     max_kuerz = {
         "FREIWILLIG":    100,
         "PFLICHT_ERMESSEN": 15,
@@ -787,18 +791,18 @@ def main():
                (SELECT COALESCE(SUM(h.betrag),0) FROM haushaltswerte h
                 JOIN konten k ON h.konto_id=k.id
                 JOIN kontenklassen kk ON k.kontenklasse_id=kk.id
-                WHERE h.produkt_id=p.id AND h.daten_jahr=2025
+                WHERE h.produkt_id=p.id AND h.daten_jahr=2026
                   AND h.wert_typ='PLAN_ANSATZ' AND kk.nummer=5) AS kk5,
                (SELECT COALESCE(SUM(h.betrag),0) FROM haushaltswerte h
                 JOIN konten k ON h.konto_id=k.id
                 JOIN kontenklassen kk ON k.kontenklasse_id=kk.id
-                WHERE h.produkt_id=p.id AND h.daten_jahr=2024
-                  AND h.wert_typ='PLAN_ANSATZ' AND kk.nummer=5) AS kk5_2024,
+                WHERE h.produkt_id=p.id AND h.daten_jahr=2025
+                  AND h.wert_typ='PLAN_ANSATZ' AND kk.nummer=5) AS kk5_2025,
                (SELECT COALESCE(SUM(h.betrag),0) FROM haushaltswerte h
                 JOIN konten k ON h.konto_id=k.id
                 JOIN kontenklassen kk ON k.kontenklasse_id=kk.id
-                WHERE h.produkt_id=p.id AND h.daten_jahr=2023
-                  AND h.wert_typ='PLAN_ANSATZ' AND kk.nummer=5) AS kk5_2023
+                WHERE h.produkt_id=p.id AND h.daten_jahr=2024
+                  AND h.wert_typ='PLAN_ANSATZ' AND kk.nummer=5) AS kk5_2024
         FROM produkte p
         JOIN steuerungs_kategorien sk ON p.steuerungs_kategorie_id=sk.id
         JOIN teilplaene t ON p.teilplan_id=t.id
@@ -814,9 +818,9 @@ def main():
             "max_kuerzung_pct":      max_kuerz.get(r["code"], 0),
             "tp_nr":                 r["tp_nr"],
             "tp_name":               TP_NAMEN_SCHOEN.get(r["tp_nr"], r["tp_bez"]),
-            "kk5_2025":              round(r["kk5"], 2),
+            "kk5_2026":              round(r["kk5"], 2),
+            "kk5_2025":              round(r["kk5_2025"], 2),
             "kk5_2024":              round(r["kk5_2024"], 2),
-            "kk5_2023":              round(r["kk5_2023"], 2),
         })
     result["simulator_produkte"] = sim
 
@@ -905,8 +909,8 @@ def main():
     dtl_total = sum(len(tp["produkte"]) for tp in result["details_tp"].values())
     for k, v in [
         ("Zeitreihe",          len(result["zeitreihe"])),
+        ("Teilplaene 2026",    len(by_year["2026"]["teilplaene"])),
         ("Teilplaene 2025",    len(by_year["2025"]["teilplaene"])),
-        ("Teilplaene 2024",    len(by_year["2024"]["teilplaene"])),
         ("Ertragsquellen",     len(result["ertragsquellen"])),
         ("Simulator-Produkte", len(sim)),
         ("Details-Produkte",   dtl_total),
@@ -920,7 +924,7 @@ def main():
         ("Zweckverbände",      len(result.get("zweckverbände") or [])),
     ]:
         print(f"     {k+':':25s} {v}")
-    for yr in [2023, 2024, 2025]:
+    for yr in [2023, 2024, 2025, 2026]:
         m = by_year[str(yr)]["meta"]
         gt = GT_BY_YEAR[yr]
         print(f"     {f'ETL KK4 {yr}:':25s} {m['ertraege_etl']:>15,.2f}  (GT {gt['ertraege']:>15,.2f})")
@@ -1238,11 +1242,11 @@ def make_beteiligungen(con) -> dict | None:
 def make_investitionen(con) -> list:
     """Abschreibungen (AfA, Konten 53xx) vs. Investitions-Auszahlungen (KK7 Konten 78xx) je Jahr."""
     YEARS = [
-        (2021, "IST_ERGEBNIS", "Ist 2021",  False),
         (2022, "IST_ERGEBNIS", "Ist 2022",  False),
         (2023, "IST_ERGEBNIS", "Ist 2023",  False),
-        (2024, "PLAN_ANSATZ",  "Plan 2024", False),
+        (2024, "IST_ERGEBNIS", "Ist 2024",  False),
         (2025, "PLAN_ANSATZ",  "Plan 2025", False),
+        (2026, "PLAN_ANSATZ",  "Plan 2026", False),
     ]
     result = []
     for jahr, wert_typ, label, ist_prognose in YEARS:

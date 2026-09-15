@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Haushaltsplan Stadt Suhl 2025 – Dashboard</title>
+<title>Haushaltsplan Stadt Suhl 2026 – Dashboard</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <style>
@@ -54,7 +54,7 @@
 <!-- ─── HEADER ──────────────────────────────────────────────────────────── -->
 <div class="mb-6 flex items-start justify-between gap-4">
   <div>
-    <h1 class="text-2xl font-bold text-slate-100">Haushaltsplan Stadt Suhl 2025</h1>
+    <h1 class="text-2xl font-bold text-slate-100">Haushaltsplan Stadt Suhl 2026</h1>
     <p class="text-slate-400 text-sm mt-1">Interaktives Analyse-Dashboard · kommunale Doppik (ThürKDG)</p>
   </div>
   <img src="logo.jpg" alt="Cortex AI Solutions" class="h-12 w-auto rounded-lg shrink-0 opacity-90 hover:opacity-100 transition-opacity">
@@ -73,8 +73,12 @@
       2024
     </button>
     <button onclick="switchYear(2025)" data-jahr="2025"
-      class="year-pill text-sm px-4 py-1.5 rounded-full border-blue-400 text-slate-100 bg-blue-950 transition-colors">
+      class="year-pill text-sm px-4 py-1.5 rounded-full border border-slate-600 text-slate-400 hover:border-blue-400 hover:text-slate-200 transition-colors">
       2025
+    </button>
+    <button onclick="switchYear(2026)" data-jahr="2026"
+      class="year-pill text-sm px-4 py-1.5 rounded-full border-blue-400 text-slate-100 bg-blue-950 transition-colors">
+      2026
     </button>
   </div>
 </div>
@@ -84,7 +88,7 @@
   <div class="card p-4">
     <div class="kpi-label">Gesamterträge</div>
     <div class="kpi-value text-emerald-400" id="kpi-ertraege">–</div>
-    <div class="note mt-1" id="kpi-ertraege-note">Haushaltssatzung 2025</div>
+    <div class="note mt-1" id="kpi-ertraege-note">Haushaltssatzung 2026</div>
   </div>
   <div class="card p-4">
     <div class="kpi-label">Gesamtaufwendungen</div>
@@ -299,8 +303,8 @@
 
   <!-- Personalquote Zeitreihe -->
   <div class="card p-5 mb-6">
-    <div class="section-title">Personalquote im Zeitverlauf 2021&#8211;2025</div>
-    <p class="text-slate-400 text-xs mb-3">Personalaufwand (Konten 50xx) als Anteil an Gesamtaufwendungen (KK5). IST 2021&#8211;2023, Plan 2024/2025.</p>
+    <div class="section-title">Personalquote im Zeitverlauf 2022&#8211;2026</div>
+    <p class="text-slate-400 text-xs mb-3">Personalaufwand (Konten 50xx) als Anteil an Gesamtaufwendungen (KK5). IST 2022&#8211;2024, Plan 2025/2026.</p>
     <div id="chart-pers-quote-trend" style="height:220px"></div>
   </div>
 
@@ -596,22 +600,22 @@
     <div class="section-title">Haushaltslage im Zeitverlauf</div>
     <p class="text-slate-400 text-sm mb-4">
       Jahresergebnis (Ertr&auml;ge &minus; Aufwendungen) und Finanzierungssaldo
-      (Einzahlungen &minus; Auszahlungen) 2021&ndash;2025.
+      (Einzahlungen &minus; Auszahlungen) 2022&ndash;2026.
       Gr&uuml;n&nbsp;= &Uuml;berschuss/positiv &middot; Rot&nbsp;= Fehlbetrag/negativ.
-      IST 2021&ndash;2023 &middot; Plan 2024&ndash;2025.
+      IST 2022&ndash;2024 &middot; Plan 2025&ndash;2026.
     </p>
     <div class="kpi-row mb-5" id="hl-kpi-row"></div>
     <div id="chart-hl" class="plotly-chart" style="min-height:300px;"></div>
     <div class="note mt-2">
-      IST-Werte aus Haushaltsjahresabschluss-Ergebnissen 2021&ndash;2023.
-      Plan 2024/2025 = Planansatz gem&auml;&szlig; Haushaltsplan.
+      IST-Werte aus Haushaltsjahresabschluss-Ergebnissen 2022&ndash;2024.
+      Plan 2025/2026 = Planansatz gem&auml;&szlig; Haushaltsplan.
     </div>
   </div>
   <!-- bestehend: Ertraege & Aufwendungen -->
   <div class="card p-5 mb-6">
-    <div class="section-title">Erträge & Aufwendungen 2022–2028</div>
+    <div class="section-title">Erträge & Aufwendungen 2022–2029</div>
     <div id="chart-zeitreihe" class="plotly-chart" style="min-height:420px;"></div>
-    <div class="note mt-2">Schraffiert = Finanzplanung (Prognose). Quellen: Haushaltspläne Suhl 2023, 2024 &amp; 2025</div>
+    <div class="note mt-2">Schraffiert = Finanzplanung (Prognose). Quellen: Haushaltspläne Suhl 2023, 2024, 2025 &amp; 2026</div>
   </div>
   <!-- C) Investitionen & Substanzerhalt -->
   <div class="card p-5 mb-6">
@@ -623,7 +627,7 @@
     </p>
     <div id="chart-invest" class="plotly-chart" style="min-height:340px;"></div>
     <div class="note mt-2">
-      Quelle: Haushaltspl&auml;ne Suhl 2023&ndash;2025 (IST-Ergebnis 2021&ndash;2023, Planansatz 2024&ndash;2025).
+      Quelle: Haushaltspl&auml;ne Suhl 2023&ndash;2026 (IST-Ergebnis 2022&ndash;2024, Planansatz 2025&ndash;2026).
       Rote gestrichelte Linie = 100&nbsp;% (Substanzerhalt-Schwelle).
     </div>
   </div>
@@ -647,7 +651,7 @@
     <!-- Ergebnis-Banner -->
     <div class="card p-4 mb-6 flex items-center justify-between flex-wrap gap-4">
       <div>
-        <div class="kpi-label">Simuliertes Jahresergebnis 2025</div>
+        <div class="kpi-label">Simuliertes Jahresergebnis 2026</div>
         <div class="kpi-value" id="sim-ergebnis">–</div>
       </div>
       <div>
@@ -933,7 +937,7 @@
 
 <!-- ─── FOOTER ─────────────────────────────────────────────────────────── -->
 <div class="mt-8 text-center note">
-  Datenquelle: Haushaltspläne Stadt Suhl 2023, 2024 &amp; 2025 (öffentliche Dokumente) ·
+  Datenquelle: Haushaltspläne Stadt Suhl 2023, 2024, 2025 &amp; 2026 (öffentliche Dokumente) ·
   Generiert mit Cortex AI Solutions ·
   <span id="generiert-am"></span>
 </div>
@@ -973,7 +977,7 @@ const SK_LABEL = {
 // ── Simulator state ────────────────────────────────────────────────────────
 let DATA = null;
 let simState = {};   // produkt_nummer → kuerzung_pct (0–max)
-let activeJahr = 2025;
+let activeJahr = 2026;
 
 function getYD() { return DATA.by_year[String(activeJahr)]; }
 
@@ -1000,7 +1004,7 @@ function switchYear(jahr) {
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────
-fetch("budget_data.json?v=20260615c")
+fetch("budget_data.json?v=20260915a")
   .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
   .then(d => { DATA = d; init(); })
   .catch(e => {
@@ -1621,7 +1625,7 @@ function renderSimListe() {
           <span class="ml-1 tag ${skTagClass(p.steuerungs_code)}">${SK_LABEL[p.steuerungs_code] || p.steuerungs_code}</span>
         </div>
         <div class="text-right text-sm shrink-0">
-          <div class="text-slate-400">${fmtMio(p.kk5_2025)}</div>
+          <div class="text-slate-400">${fmtMio(p.kk5_2026)}</div>
         </div>
       </div>
       <div class="slider-row">
@@ -1635,7 +1639,7 @@ function renderSimListe() {
           ${locked ? '<span class="ml-1 text-xs text-slate-600">gesperrt</span>' : `<span class="text-xs text-slate-600"> / max ${p.max_kuerzung_pct}%</span>`}
         </div>
         <div class="text-sm text-right">
-          <span id="sav-${p.produkt_nummer}" class="text-emerald-400">${cur > 0 ? '−'+fmtMio(p.kk5_2025 * cur / 100) : ''}</span>
+          <span id="sav-${p.produkt_nummer}" class="text-emerald-400">${cur > 0 ? '−'+fmtMio(p.kk5_2026 * cur / 100) : ''}</span>
         </div>
       </div>
       ${p.rechtsgrundlage ? `
@@ -1659,7 +1663,7 @@ function onSlider(el) {
 
   pctEl.textContent = val + "%";
   pctEl.className   = val > 0 ? "text-emerald-400" : "text-slate-400";
-  savEl.textContent = val > 0 ? "−" + fmtMio(prod.kk5_2025 * val / 100) : "";
+  savEl.textContent = val > 0 ? "−" + fmtMio(prod.kk5_2026 * val / 100) : "";
 
   updateSimErgebnis();
   checkWechselwirkungen();
@@ -1668,7 +1672,7 @@ function onSlider(el) {
 function updateSimErgebnis() {
   let totalEinsparung = 0;
   DATA.simulator_produkte.forEach(p => {
-    totalEinsparung += p.kk5_2025 * (simState[p.produkt_nummer] || 0) / 100;
+    totalEinsparung += p.kk5_2026 * (simState[p.produkt_nummer] || 0) / 100;
   });
 
   const baseErgebnis = DATA.meta.jahresergebnis_soll;
@@ -1692,15 +1696,15 @@ function calcWechselwirkungsZuschlag() {
     wwk.trigger_produkte.forEach(pnr => {
       const prod = DATA.simulator_produkte.find(p => p.produkt_nummer === pnr);
       if (!prod) return;
-      triggerGesamtKK5    += prod.kk5_2025;
-      triggerKuerzungKK5  += prod.kk5_2025 * (simState[pnr] || 0) / 100;
+      triggerGesamtKK5    += prod.kk5_2026;
+      triggerKuerzungKK5  += prod.kk5_2026 * (simState[pnr] || 0) / 100;
     });
     const kuerzungPct = triggerGesamtKK5 > 0 ? (triggerKuerzungKK5 / triggerGesamtKK5) * 100 : 0;
 
     if (kuerzungPct > wwk.trigger_schwelle_pct) {
       const zielProd = DATA.simulator_produkte.find(p => p.produkt_nummer === wwk.ziel_produkt);
       if (zielProd) {
-        zuschlag += zielProd.kk5_2025 * wwk.risiko_aufschlag_pct / 100;
+        zuschlag += zielProd.kk5_2026 * wwk.risiko_aufschlag_pct / 100;
       }
     }
   });
@@ -1717,13 +1721,13 @@ function checkWechselwirkungen() {
     wwk.trigger_produkte.forEach(pnr => {
       const prod = DATA.simulator_produkte.find(p => p.produkt_nummer === pnr);
       if (!prod) return;
-      total    += prod.kk5_2025;
-      gekuerzt += prod.kk5_2025 * (simState[pnr] || 0) / 100;
+      total    += prod.kk5_2026;
+      gekuerzt += prod.kk5_2026 * (simState[pnr] || 0) / 100;
     });
     const pct = total > 0 ? (gekuerzt / total) * 100 : 0;
     if (pct > wwk.trigger_schwelle_pct) {
       const zielProd = DATA.simulator_produkte.find(p => p.produkt_nummer === wwk.ziel_produkt);
-      const zuschlag = zielProd ? zielProd.kk5_2025 * wwk.risiko_aufschlag_pct / 100 : 0;
+      const zuschlag = zielProd ? zielProd.kk5_2026 * wwk.risiko_aufschlag_pct / 100 : 0;
       active.push(`${wwk.beschreibung} → Risikozuschlag auf ${zielProd ? zielProd.bezeichnung : wwk.ziel_produkt}: +${fmtMio(zuschlag)}`);
     }
   });
@@ -1757,7 +1761,7 @@ function renderPersonal() {
   const P = DATA.personal;
   if (!P) return;
   const yr = String(activeJahr);
-  const y = P.by_year[yr] || P.by_year["2025"];
+  const y = P.by_year[yr] || P.by_year["2026"];
   const gruppen = P.gruppen_labels;
   const keys = Object.keys(gruppen);
 
@@ -1815,8 +1819,8 @@ function renderPersonal() {
     margin: { l: 10, r: 10, t: 10, b: 60 },
   }, { responsive: true, displayModeBar: false });
 
-  // Trend-Chart (immer 2023–2025)
-  const tYears = ["2023", "2024", "2025"];
+  // Trend-Chart (immer 2024–2026)
+  const tYears = ["2024", "2025", "2026"];
   const trendTraces = keys.map(k => ({
     type: "bar",
     name: gruppen[k],
@@ -2549,10 +2553,10 @@ function loadSimSzenario(type) {
     var sparMap = getHskSparByProdukt(type === 'hsk_max');
     var n = 0;
     DATA.simulator_produkte.forEach(function(p) {
-      if (!p.kk5_2025 || p.max_kuerzung_pct === 0) return;
+      if (!p.kk5_2026 || p.max_kuerzung_pct === 0) return;
       var spar = sparMap[p.produkt_nummer] || 0;
       if (!spar) return;
-      var pct = Math.round(spar / p.kk5_2025 * 100);
+      var pct = Math.round(spar / p.kk5_2026 * 100);
       pct = Math.max(0, Math.min(pct, p.max_kuerzung_pct));
       if (pct > 0) { simState[p.produkt_nummer] = pct; n++; }
     });
@@ -2619,8 +2623,8 @@ renderSimListe = function() {
     var cur = simState[p.produkt_nummer] || 0;
     var hskSpar = hskProdMap[p.produkt_nummer] || 0;
     var hskBadge = '';
-    if (hskSpar && p.kk5_2025) {
-      var hskPct = hskSpar / p.kk5_2025 * 100;
+    if (hskSpar && p.kk5_2026) {
+      var hskPct = hskSpar / p.kk5_2026 * 100;
       hskBadge = '<span class="text-[9px] ml-1 px-1 py-0.5 rounded bg-blue-900/30 text-blue-300"' +
         ' title="HSK-Einsparziel (aktiv+erl.): +' + fmt(hskSpar/1000, 1) + ' T€">' +
         'HSK&thinsp;' + hskPct.toFixed(hskPct < 1 ? 1 : 0) + '%</span>';
@@ -2636,23 +2640,23 @@ renderSimListe = function() {
             (SK_LABEL[p.steuerungs_code] || p.steuerungs_code) + '</span>' +
           hskBadge +
         '</div>' +
-        '<div class="text-right text-sm shrink-0 text-slate-400">' + fmtMio(p.kk5_2025) + '</div>' +
+        '<div class="text-right text-sm shrink-0 text-slate-400">' + fmtMio(p.kk5_2026) + '</div>' +
       '</div>' +
       '<div class="slider-row">' +
         // Zone-Bar: zeigt HSK-Zone (blau) und eigene Zusatz-Zone (orange)
         '<div class="relative mb-1.5">' +
           '<div id="zone-' + p.produkt_nummer + '"' +
             ' class="w-full h-3 rounded bg-slate-700"></div>' +
-          (hskSpar && p.kk5_2025 && p.max_kuerzung_pct > 0
+          (hskSpar && p.kk5_2026 && p.max_kuerzung_pct > 0
             ? '<div class="absolute top-0 h-3 w-0.5 rounded-full bg-blue-300 pointer-events-none"' +
               ' title="HSK-Einsparziel"' +
-              ' style="left:' + Math.min(hskSpar/p.kk5_2025*100/p.max_kuerzung_pct*100, 100).toFixed(1) + '%"></div>'
+              ' style="left:' + Math.min(hskSpar/p.kk5_2026*100/p.max_kuerzung_pct*100, 100).toFixed(1) + '%"></div>'
             : '') +
         '</div>' +
         '<input type="range" min="0" max="' + p.max_kuerzung_pct + '" step="1" value="' + cur + '"' +
           (locked ? ' disabled' : '') +
           ' data-pnr="' + p.produkt_nummer + '"' +
-          ' data-hsk-pct="' + (hskSpar && p.kk5_2025 ? (hskSpar/p.kk5_2025*100).toFixed(2) : '0') + '"' +
+          ' data-hsk-pct="' + (hskSpar && p.kk5_2026 ? (hskSpar/p.kk5_2026*100).toFixed(2) : '0') + '"' +
           ' oninput="onSlider(this)"' +
           ' class="' + (locked ? 'opacity-30 cursor-not-allowed' : '') + '">' +
         '<div class="text-sm text-center">' +
@@ -2664,7 +2668,7 @@ renderSimListe = function() {
         '</div>' +
         '<div class="text-sm text-right">' +
           '<span id="sav-' + p.produkt_nummer + '" class="text-emerald-400">' +
-            (cur > 0 ? '&minus;' + fmtMio(p.kk5_2025 * cur / 100) : '') + '</span>' +
+            (cur > 0 ? '&minus;' + fmtMio(p.kk5_2026 * cur / 100) : '') + '</span>' +
         '</div>' +
       '</div>' +
       (p.rechtsgrundlage
@@ -3142,12 +3146,12 @@ function _renderHaushaltslage() {
         + '<div class="kpi-label" style="font-size:0.65rem;margin-top:2px;color:#64748b">' + sub + '</div>'
         + '</div>';
     }
-    var i23 = labels.indexOf('Ist 2023');
-    var i25 = labels.indexOf('Ansatz 2025');
+    var i23 = labels.indexOf('Ist 2024');
+    var i25 = labels.indexOf('Ansatz 2026');
     var html = '';
-    if (i23 >= 0) html += chip('Jahresergebnis 2023 (Ist)',      ergeb[i23],   'KK4 \u2212 KK5');
-    if (i25 >= 0) html += chip('Jahresergebnis 2025 (Plan)',     ergeb[i25],   'KK4 \u2212 KK5');
-    if (i25 >= 0) html += chip('Finanzierungssaldo 2025 (Plan)', finsald[i25], 'KK6 \u2212 KK7');
+    if (i23 >= 0) html += chip('Jahresergebnis 2024 (Ist)',      ergeb[i23],   'KK4 \u2212 KK5');
+    if (i25 >= 0) html += chip('Jahresergebnis 2026 (Plan)',     ergeb[i25],   'KK4 \u2212 KK5');
+    if (i25 >= 0) html += chip('Finanzierungssaldo 2026 (Plan)', finsald[i25], 'KK6 \u2212 KK7');
     kpiEl.innerHTML = html;
   }
 
@@ -3507,12 +3511,12 @@ function openDrillDown(tpNr, skFilter) {
   // Produkte filtern und sortieren (immer 2025-Basis)
   let produkte = (DATA.simulator_produkte || []).filter(p => p.tp_nr === tpNr);
   if (skFilter) produkte = produkte.filter(p => p.steuerungs_code === skFilter);
-  const mitBudget  = produkte.filter(p => p.kk5_2025 > 0).sort((a, b) => b.kk5_2025 - a.kk5_2025);
-  const ohneBudget = produkte.filter(p => p.kk5_2025 <= 0).sort((a, b) => a.bezeichnung.localeCompare(b.bezeichnung));
+  const mitBudget  = produkte.filter(p => p.kk5_2026 > 0).sort((a, b) => b.kk5_2026 - a.kk5_2026);
+  const ohneBudget = produkte.filter(p => p.kk5_2026 <= 0).sort((a, b) => a.bezeichnung.localeCompare(b.bezeichnung));
   const gezeigt    = [...mitBudget, ...ohneBudget];
 
-  const totalBudget = mitBudget.reduce((s, p) => s + p.kk5_2025, 0);
-  const maxBudget   = mitBudget.length > 0 ? mitBudget[0].kk5_2025 : 1;
+  const totalBudget = mitBudget.reduce((s, p) => s + p.kk5_2026, 0);
+  const maxBudget   = mitBudget.length > 0 ? mitBudget[0].kk5_2026 : 1;
 
   // Titel & Subtitle
   document.getElementById("dd-title").textContent = tp.tp_name;
@@ -3553,14 +3557,14 @@ function openDrillDown(tpNr, skFilter) {
     <tbody>`;
 
   gezeigt.forEach(p => {
-    const hatBudget = p.kk5_2025 > 0;
-    const barW      = hatBudget ? Math.round((p.kk5_2025 / maxBudget) * 80) : 0;
+    const hatBudget = p.kk5_2026 > 0;
+    const barW      = hatBudget ? Math.round((p.kk5_2026 / maxBudget) * 80) : 0;
     const dimmed    = hatBudget ? "" : " opacity-40";
     html += `<tr class="${dimmed}">
       <td class="pr-3 text-slate-500 font-mono text-xs align-middle" style="white-space:nowrap">${escHtml(p.produkt_nummer)}</td>
       <td class="pr-3 text-slate-200 align-middle">${escHtml(p.bezeichnung)}</td>
       <td class="pr-3 align-middle"><span class="tag ${skTagClass(p.steuerungs_code)}">${SK_LABEL[p.steuerungs_code] || p.steuerungs_code}</span></td>
-      <td class="text-right align-middle font-mono text-slate-300" style="white-space:nowrap">${hatBudget ? fmtMio(p.kk5_2025) : "–"}</td>
+      <td class="text-right align-middle font-mono text-slate-300" style="white-space:nowrap">${hatBudget ? fmtMio(p.kk5_2026) : "–"}</td>
       <td class="pl-4 align-middle">
         ${hatBudget ? `<span class="bar-mini" style="width:${barW}px;opacity:0.7;"></span>` : ""}
       </td>
@@ -3669,9 +3673,9 @@ function jvShortTP(n) {
 }
 
 function getKK5(p, jahr) {
-  if (jahr === 2025) return p.kk5_2025 || 0;
-  if (jahr === 2024) return p.kk5_2024 || 0;
-  return p.kk5_2023 || 0;
+  if (jahr === 2026) return p.kk5_2026 || 0;
+  if (jahr === 2025) return p.kk5_2026 || 0;
+  return p.kk5_2024 || 0;
 }
 
 function buildJVPicker(containerId, active, onChange) {
@@ -3852,7 +3856,7 @@ function buildJVKontenHTML(pnr, tpNr) {
   const dtProd = (DATA.details_tp?.[tpNr]?.produkte || []).find(p => p.pnr === pnr);
   const konten  = (dtProd?.konten || []).filter(k => k.kk === 5);
   if (!konten.length) return "";
-  const yrKey = yr => { const k = "b" + String(yr).slice(2); return ["b23","b24","b25"].includes(k) ? k : null; };
+  const yrKey = yr => { const k = "b" + String(yr).slice(2); return ["b24","b25","b26"].includes(k) ? k : null; };
   const kA = yrKey(jvBasis), kB = yrKey(jvVergl);
   const sorted = [...konten].sort((a, b) => {
     const dA = Math.abs((kB ? (a[kB]||0) : 0) - (kA ? (a[kA]||0) : 0));
@@ -4401,7 +4405,7 @@ function renderHskInfothek() {
       if (!seen[key]) {
         seen[key] = { ev: ev, produkte: [] };
       }
-      if (p.produkt_nummer.length >= 5 && parseFloat(p.kk5_2025 || 0) > 0) {
+      if (p.produkt_nummer.length >= 5 && parseFloat(p.kk5_2026 || 0) > 0) {
         seen[key].produkte.push(escHtml(p.bezeichnung));
       }
     });
