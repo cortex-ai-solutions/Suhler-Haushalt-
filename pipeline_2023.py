@@ -239,11 +239,13 @@ def extract_page(page, fail_log, page_label: str) -> list:
 
     for y, row in line_list:
         konto_match = None
+        konto_word = None
         for w in row:
             if 50 <= round(w["x0"]) <= 125:
                 m = KONTO_LINE_RE.match(w["text"])
                 if m:
                     konto_match = m
+                    konto_word = w
                     break
 
         if konto_match:
@@ -254,10 +256,13 @@ def extract_page(page, fail_log, page_label: str) -> list:
                 pending = None
                 continue
 
+            # Grenze zur Bezeichnung dynamisch ab Ende des Konto-Code-Worts,
+            # nicht fix bei 125 (siehe pipeline_2024.py).
+            bez_start_x = konto_word["x1"]
             konto_bez = " ".join(
                 decode_cid(w["text"])
                 for w in row
-                if round(w["x0"]) > 125 and assign_column(round(w["x0"]))[0] is None
+                if w["x0"] > bez_start_x and assign_column(round(w["x0"]))[0] is None
             )
             # Dash "-" im Spaltenbereich ist Beschreibungspunktuierung, kein Wert.
             same_line_values = {}
@@ -278,11 +283,14 @@ def extract_page(page, fail_log, page_label: str) -> list:
                 })
                 pending = None
             else:
-                pending = (konto_match.group(1), konto_match.group(2), konto_bez)
+                pending = [konto_match.group(1), konto_match.group(2), konto_bez]
                 empty_after_pending = 0
             continue
 
+        # Werte-Extraktion + Fortsetzung einer mehrzeilig umgebrochenen
+        # Kontobezeichnung (keine Code-Zone auf einer reinen Folgezeile).
         values = {}
+        extra_bez_words = []
         for w in row:
             x = round(w["x0"])
             year, wert_typ = assign_column(x)
@@ -290,9 +298,14 @@ def extract_page(page, fail_log, page_label: str) -> list:
                 v = parse_german_number(w["text"])
                 if v is not None:
                     values[(year, wert_typ)] = v
+            elif pending and empty_after_pending == 0:
+                extra_bez_words.append(decode_cid(w["text"]))
+        extra_bez = " ".join(extra_bez_words)
 
         if pending and values:
             prod6, konto7, konto_bez = pending
+            if extra_bez:
+                konto_bez = (konto_bez + " " + extra_bez).strip()
             results.append({
                 "prod6":    prod6,
                 "konto7":   konto7,
@@ -303,6 +316,8 @@ def extract_page(page, fail_log, page_label: str) -> list:
             empty_after_pending = 0
 
         elif pending and not values:
+            if extra_bez:
+                pending[2] = (pending[2] + " " + extra_bez).strip()
             empty_after_pending += 1
             if empty_after_pending >= 3:
                 fail_log.write(
@@ -349,18 +364,22 @@ def extract_page_gesamt(page, fail_log, page_label: str) -> list:
 
     for y, row in line_list:
         konto_match = None
+        konto_word = None
         for w in row:
             if 60 <= round(w["x0"]) <= 100:
                 m = PLAIN_KONTO_RE.match(w["text"])
                 if m and w["text"][0] in ("6", "7") and w["text"][:2] not in ("68", "69", "78", "79"):
                     konto_match = m
+                    konto_word = w
                 break
 
         if konto_match:
+            # Dynamische Grenze statt fix 100 (siehe extract_page).
+            bez_start_x = konto_word["x1"]
             konto_bez = " ".join(
                 decode_cid(w["text"])
                 for w in row
-                if round(w["x0"]) > 100 and assign_column_gesamt(round(w["x0"]))[0] is None
+                if w["x0"] > bez_start_x and assign_column_gesamt(round(w["x0"]))[0] is None
             )
             same_line_values = {}
             for w in row:
@@ -379,11 +398,12 @@ def extract_page_gesamt(page, fail_log, page_label: str) -> list:
                 })
                 pending = None
             else:
-                pending = (konto_match.group(1), konto_bez)
+                pending = [konto_match.group(1), konto_bez]
                 empty_after_pending = 0
             continue
 
         values = {}
+        extra_bez_words = []
         for w in row:
             x = round(w["x0"])
             year, wert_typ = assign_column_gesamt(x)
@@ -391,9 +411,14 @@ def extract_page_gesamt(page, fail_log, page_label: str) -> list:
                 v = parse_german_number(w["text"])
                 if v is not None:
                     values[(year, wert_typ)] = v
+            elif pending and empty_after_pending == 0:
+                extra_bez_words.append(decode_cid(w["text"]))
+        extra_bez = " ".join(extra_bez_words)
 
         if pending and values:
             konto7, konto_bez = pending
+            if extra_bez:
+                konto_bez = (konto_bez + " " + extra_bez).strip()
             results.append({
                 "konto7":    konto7,
                 "konto_bez": konto_bez,
@@ -403,6 +428,8 @@ def extract_page_gesamt(page, fail_log, page_label: str) -> list:
             empty_after_pending = 0
 
         elif pending and not values:
+            if extra_bez:
+                pending[1] = (pending[1] + " " + extra_bez).strip()
             empty_after_pending += 1
             if empty_after_pending >= 3:
                 fail_log.write(

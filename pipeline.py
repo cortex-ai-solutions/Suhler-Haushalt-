@@ -1,6 +1,6 @@
 """
-pipeline_2024.py - ETL fuer Haushaltsplan Suhl 2024
-Identisch zu pipeline.py, aber mit 2024-Konfiguration (COL_DEFS, Ground Truth).
+pipeline.py - Speicheroptimierte ETL-Pipeline (Divide & Conquer)
+Verarbeitet pdf_chunks/tp_*.pdf sequentiell; aggressives RAM-Management.
 """
 
 import gc
@@ -17,21 +17,21 @@ import pdfplumber
 # Konfiguration
 # ---------------------------------------------------------------------------
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
-CHUNKS_DIR = os.path.join(BASE_DIR, "pdf_chunks_2024")
-DB_PATH    = os.path.join(BASE_DIR, "suhl_haushalt_2025.db")  # selbe DB, anderes haushaltsplan_jahr
-FAIL_LOG   = os.path.join(BASE_DIR, "parsing_failures_2024.log")
-HAUSHALTSPLAN_JAHR = 2024
+CHUNKS_DIR = os.path.join(BASE_DIR, "pdf_chunks")
+DB_PATH    = os.path.join(BASE_DIR, "suhl_haushalt_2025.db")
+FAIL_LOG   = os.path.join(BASE_DIR, "parsing_failures.log")
+HAUSHALTSPLAN_JAHR = 2025
 BATCH_SIZE = 500
 
 # Spalten-Definitionen: (x_min, x_max, daten_jahr, wert_typ)
 # Ermittelt durch Seiten-Probe; Jahres-Labels im PDF bei x=306,353,399,444,489,534
 COL_DEFS = [
-    (265, 340, 2022, "IST_ERGEBNIS"),
-    (340, 392, 2023, "ANSATZ_VORJAHR"),
-    (392, 437, 2024, "PLAN_ANSATZ"),
-    (437, 482, 2025, "FINANZPLANUNG"),
-    (482, 527, 2026, "FINANZPLANUNG"),
-    (527, 580, 2027, "FINANZPLANUNG"),
+    (265, 345, 2023, "IST_ERGEBNIS"),
+    (345, 400, 2024, "ANSATZ_VORJAHR"),
+    (400, 445, 2025, "PLAN_ANSATZ"),
+    (445, 490, 2026, "FINANZPLANUNG"),
+    (490, 535, 2027, "FINANZPLANUNG"),
+    (535, 585, 2028, "FINANZPLANUNG"),
 ]
 
 # Account-Code-Format: PPPPPP.KKKKKK(K) bei x=55-125
@@ -40,20 +40,20 @@ KONTO_LINE_RE = re.compile(r"^(\d{5,6})\.(\d{6,7})$")
 # Spalten-Definitionen für Gesamtproduktplan Finanzplan (Seiten 27-41 im Chunk)
 # Jahresspalten liegen ~37px weiter links als in TP-Chunks
 COL_DEFS_GESAMT = [
-    (225, 293, 2022, "IST_ERGEBNIS"),
-    (293, 348, 2023, "ANSATZ_VORJAHR"),
-    (348, 401, 2024, "PLAN_ANSATZ"),
-    (401, 450, 2025, "FINANZPLANUNG"),
-    (450, 500, 2026, "FINANZPLANUNG"),
-    (500, 555, 2027, "FINANZPLANUNG"),
+    (228, 315, 2023, "IST_ERGEBNIS"),
+    (315, 368, 2024, "ANSATZ_VORJAHR"),
+    (368, 415, 2025, "PLAN_ANSATZ"),
+    (415, 460, 2026, "FINANZPLANUNG"),
+    (460, 503, 2027, "FINANZPLANUNG"),
+    (503, 550, 2028, "FINANZPLANUNG"),
 ]
 
 # Account-Code-Format im Gesamtproduktplan Finanzplan: 7-stellig, kein Punkt, bei x=65-95
 PLAIN_KONTO_RE = re.compile(r"^(\d{7})$")
 
 GESAMT_FINANZPLAN_CHUNK = os.path.join(CHUNKS_DIR, "00_3_Gesamtproduktplan.pdf")
-GESAMT_FP_START_PAGE = 34   # 0-basiert (= Seite 35 im Chunk, dok-Seite 133)
-GESAMT_FP_END_PAGE   = 51   # 0-basiert, inklusiv (= Seite 52 im Chunk, dok-Seite 150)
+GESAMT_FP_START_PAGE = 26   # 0-basiert (= Seite 27 im Chunk, dok-Seite 126)
+GESAMT_FP_END_PAGE   = 40   # 0-basiert, inklusiv (= Seite 41 im Chunk, dok-Seite 141)
 
 # CID-Kodierung → UTF-8 (Umlaute in PDF)
 CID_MAP = {
@@ -62,12 +62,12 @@ CID_MAP = {
     "233": "e",  "176": "°",
 }
 
-# Ground Truth aus der Haushaltssatzung 2024 §1
+# Ground Truth aus der Haushaltssatzung 2025
 GROUND_TRUTH = {
-    (4, "PLAN_ANSATZ"): 130_353_020.00,
-    (5, "PLAN_ANSATZ"): 133_802_080.00,
-    (6, "PLAN_ANSATZ"): 124_398_580.00,
-    (7, "PLAN_ANSATZ"): 123_750_200.00,
+    (4, "PLAN_ANSATZ"): 136_395_290.00,
+    (5, "PLAN_ANSATZ"): 138_003_230.00,
+    (6, "PLAN_ANSATZ"): 136_365_830.00,
+    (7, "PLAN_ANSATZ"): 135_802_480.00,
 }
 
 # Korrekte Teilplan-Bezeichnungen aus dem PDF-TOC (ersetzen Platzhalter in setup_database.py)
@@ -90,12 +90,6 @@ TEILPLAENE_KORREKT = {
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
-
-
-MIGRATION_PREFIX = "2024_"
-
-def mkey(name: str) -> str:
-    return MIGRATION_PREFIX + name
 
 def decode_cid(text: str) -> str:
     return re.sub(r"\(cid:(\d+)\)", lambda m: CID_MAP.get(m.group(1), "?"), text)
@@ -247,11 +241,11 @@ def extract_page(page, fail_log, page_label: str) -> list:
     empty_after_pending = 0
 
     for y, row in line_list:
-        # Account-Code: PPPPPP.KKKKKK bei x=50–125 (2024-PDF: ~54px)
+        # Account-Code: PPPPPP.KKKKKK bei x=55–125
         konto_match = None
         konto_word = None
         for w in row:
-            if 50 <= round(w["x0"]) <= 125:
+            if 55 <= round(w["x0"]) <= 125:
                 m = KONTO_LINE_RE.match(w["text"])
                 if m:
                     konto_match = m
@@ -260,9 +254,9 @@ def extract_page(page, fail_log, page_label: str) -> list:
 
         if konto_match:
             # Grenze zur Bezeichnung dynamisch ab Ende des Konto-Code-Worts,
-            # nicht fix bei 125: laengere Sub-Kontocodes (z.B. ".5415100")
-            # reichen bis x~102, ein festes 125 wuerde dann das erste
-            # Bezeichnungswort noch mit abschneiden.
+            # nicht fix bei 125: laengere Sub-Kontocodes reichen teils bis
+            # x~102, ein festes 125 wuerde dann das erste Bezeichnungswort
+            # noch mit abschneiden (siehe pipeline_2024.py).
             bez_start_x = konto_word["x1"]
             konto_bez = " ".join(
                 decode_cid(w["text"])
@@ -270,12 +264,11 @@ def extract_page(page, fail_log, page_label: str) -> list:
                 if w["x0"] > bez_start_x and assign_column(round(w["x0"]))[0] is None
             )
             # Prüfe: sind Werte auf DERSELBEN Zeile (Finanzplan-Format)?
-            # Dash "-" im Spaltenbereich ist Beschreibungspunktuierung, kein Wert.
             same_line_values = {}
             for w in row:
                 x = round(w["x0"])
                 year, wert_typ = assign_column(x)
-                if year is not None and w["text"].strip() not in ("-", "–"):
+                if year is not None:
                     v = parse_german_number(w["text"])
                     if v is not None:
                         same_line_values[(year, wert_typ)] = v
@@ -300,17 +293,7 @@ def extract_page(page, fail_log, page_label: str) -> list:
         # Werte-Extraktion. Zusätzlich: Wörter außerhalb der Jahres-Spalten
         # sammeln — Fortsetzung einer im PDF über mehrere Zeilen
         # umgebrochenen Kontobezeichnung. Auf einer reinen Folgezeile steht
-        # kein Konto-Code mehr (sonst wäre konto_match oben schon gegriffen),
-        # also gibt es hier keine Code-Zone zu schützen — jedes Wort, das
-        # keiner Jahres-Spalte zugeordnet ist, gehört zur Fortsetzung
-        # (Beispiel: "Unternehmen" kann bei x~53 stehen).
-        # WICHTIG: nur auf der EINEN unmittelbar folgenden Zeile sammeln
-        # (empty_after_pending==0), nicht ueber das ganze 3-Zeilen-Toleranz-
-        # fenster — sonst reisst "pending" bei ungluecklichen Seitenumbruechen
-        # fremden Flusstext (Erlaeuterungen, Fussnoten) samt darin
-        # vorkommender Zahlen mit ein (empirisch beobachtet: Bezeichnung riss
-        # Erlaeuterungstext mehrerer Absaetze mit, inkl. einer voellig
-        # falschen Millionenwert-Zuordnung).
+        # kein Konto-Code mehr, also keine Code-Zone zu schützen.
         values = {}
         extra_bez_words = []
         for w in row:
@@ -493,15 +476,14 @@ def process_chunk(chunk_path: str, tp_nr: str, con, db: DbContext, fail_log) -> 
     Ruft gc.collect() nach dem Schließen des PDFs auf.
     """
     chunk_name = os.path.basename(chunk_path)
-    chunk_key  = mkey(chunk_name)
 
     # Resumability: bereits verarbeitete Chunks überspringen
     row = con.execute(
-        "SELECT status FROM migration_status WHERE chunk_name = ?", (chunk_key,)
+        "SELECT status FROM migration_status WHERE chunk_name = ?", (chunk_name,)
     ).fetchone()
     if row and row["status"] == "DONE":
         hw_count = con.execute(
-            "SELECT rows_imported FROM migration_status WHERE chunk_name = ?", (chunk_key,)
+            "SELECT rows_imported FROM migration_status WHERE chunk_name = ?", (chunk_name,)
         ).fetchone()["rows_imported"]
         print(f"  [SKIP] {chunk_name} (bereits DONE, {hw_count} Rows)")
         return {"pages": 0, "records": 0, "rows": hw_count, "errors": 0, "skipped": True}
@@ -510,7 +492,7 @@ def process_chunk(chunk_path: str, tp_nr: str, con, db: DbContext, fail_log) -> 
     con.execute(
         "INSERT OR REPLACE INTO migration_status "
         "(chunk_name, status, rows_imported, started_at) VALUES (?, 'PROCESSING', 0, ?)",
-        (mkey(chunk_name), datetime.now().isoformat()),
+        (chunk_name, datetime.now().isoformat()),
     )
     con.commit()
 
@@ -554,7 +536,7 @@ def process_chunk(chunk_path: str, tp_nr: str, con, db: DbContext, fail_log) -> 
         con.execute(
             "UPDATE migration_status SET status='ERROR', error_msg=?, finished_at=? "
             "WHERE chunk_name=?",
-            (str(exc), datetime.now().isoformat(), mkey(chunk_name)),
+            (str(exc), datetime.now().isoformat(), chunk_name),
         )
         con.commit()
         raise
@@ -568,7 +550,7 @@ def process_chunk(chunk_path: str, tp_nr: str, con, db: DbContext, fail_log) -> 
     con.execute(
         "UPDATE migration_status SET status='DONE', rows_imported=?, finished_at=? "
         "WHERE chunk_name=?",
-        (stats["rows"], datetime.now().isoformat(), chunk_key),
+        (stats["rows"], datetime.now().isoformat(), chunk_name),
     )
     con.commit()
 
@@ -587,14 +569,13 @@ def process_gesamtproduktplan_finanzplan(con, db: DbContext, fail_log) -> dict:
     Dummy-Produkt '000000' (kein TP-Bezug) wird für alle Zeilen verwendet.
     """
     chunk_name = "GESAMT_FP"
-    chunk_key  = mkey(chunk_name)
 
     row = con.execute(
-        "SELECT status FROM migration_status WHERE chunk_name = ?", (chunk_key,)
+        "SELECT status FROM migration_status WHERE chunk_name = ?", (chunk_name,)
     ).fetchone()
     if row and row["status"] == "DONE":
         hw_count = con.execute(
-            "SELECT rows_imported FROM migration_status WHERE chunk_name = ?", (chunk_key,)
+            "SELECT rows_imported FROM migration_status WHERE chunk_name = ?", (chunk_name,)
         ).fetchone()["rows_imported"]
         print(f"  [SKIP] {chunk_name} (bereits DONE, {hw_count} Rows)")
         return {"pages": 0, "records": 0, "rows": hw_count, "errors": 0, "skipped": True}
@@ -606,7 +587,7 @@ def process_gesamtproduktplan_finanzplan(con, db: DbContext, fail_log) -> dict:
     con.execute(
         "INSERT OR REPLACE INTO migration_status "
         "(chunk_name, status, rows_imported, started_at) VALUES (?, 'PROCESSING', 0, ?)",
-        (mkey(chunk_name), datetime.now().isoformat()),
+        (chunk_name, datetime.now().isoformat()),
     )
     con.commit()
 
@@ -660,7 +641,7 @@ def process_gesamtproduktplan_finanzplan(con, db: DbContext, fail_log) -> dict:
         con.execute(
             "UPDATE migration_status SET status='ERROR', error_msg=?, finished_at=? "
             "WHERE chunk_name=?",
-            (str(exc), datetime.now().isoformat(), mkey(chunk_name)),
+            (str(exc), datetime.now().isoformat(), chunk_name),
         )
         con.commit()
         raise
@@ -671,7 +652,7 @@ def process_gesamtproduktplan_finanzplan(con, db: DbContext, fail_log) -> dict:
     con.execute(
         "UPDATE migration_status SET status='DONE', rows_imported=?, finished_at=? "
         "WHERE chunk_name=?",
-        (stats["rows"], datetime.now().isoformat(), chunk_key),
+        (stats["rows"], datetime.now().isoformat(), chunk_name),
     )
     con.commit()
 
@@ -684,7 +665,7 @@ def process_gesamtproduktplan_finanzplan(con, db: DbContext, fail_log) -> dict:
 
 def run_validation(con) -> int:
     errors = 0
-    print("\n--- Ground Truth Validierung (Haushaltssatzung 2024) ---")
+    print("\n--- Ground Truth Validierung (Haushaltssatzung 2025) ---")
     labels = {
         4: "Ertraege    KK4",
         5: "Aufwendungen KK5",
@@ -699,7 +680,7 @@ def run_validation(con) -> int:
             JOIN konten k       ON h.konto_id = k.id
             JOIN kontenklassen kk ON k.kontenklasse_id = kk.id
             WHERE h.haushaltsplan_jahr = ?
-              AND h.daten_jahr         = 2024
+              AND h.daten_jahr         = 2025
               AND h.wert_typ           = ?
               AND kk.nummer            = ?
             """,
