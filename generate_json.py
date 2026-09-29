@@ -900,6 +900,9 @@ def main():
     # ── Zweckverbände ─────────────────────────────────────────────────────────
     result["zweckverbände"] = make_zweckverbände(con)
 
+    # ── Investitionsprojekte (Projekt-Ebene, Eigenanteil vs. Foerdermittel) ──────
+    result["investitionsprojekte"] = make_investitionsprojekte(con)
+
     # ── Ausgabe ───────────────────────────────────────────────────────────────
     with open(OUT_PATH, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, separators=(",", ":"))
@@ -922,6 +925,7 @@ def main():
         ("Investitionen",      len(result.get("investitionen") or [])),
         ("Schulden",           len(result.get("schulden") or [])),
         ("Zweckverbände",      len(result.get("zweckverbände") or [])),
+        ("Investitionsprojekte", len((result.get("investitionsprojekte") or {}).get("massnahmen", []))),
     ]:
         print(f"     {k+':':25s} {v}")
     for yr in [2023, 2024, 2025, 2026]:
@@ -1309,6 +1313,192 @@ def make_schulden(con) -> list:
         }
         for r in rows
     ]
+
+
+AKTUELLES_INVESTITIONSJAHR = 2026
+
+
+def _drift_year_map(editionen: list, prefix: str) -> dict:
+    """Baut {kalenderjahr: {edition_jahr: wert}} aus den lead-basierten Spalten
+    (<prefix>_ansatz=lead0, planwert_j1=lead1, j2=lead2, j3=lead3) ueber alle Editionen.
+    Damit koennen fuer dasselbe Kalenderjahr die aus verschiedenen Editionen jeweils
+    genannten Werte verglichen werden (robuste "Jahres-Prognose-Drift" statt naivem
+    Gesamt-Vergleich, der durch das 4-Jahres-Rollfenster verzerrt waere)."""
+    year_map: dict[int, dict[int, float]] = defaultdict(dict)
+    for e in editionen:
+        ej = e["hh_plan_jahr"]
+        for lead, col in enumerate(["ansatz", "planwert_j1", "planwert_j2", "planwert_j3"]):
+            val = e.get(f"{prefix}_{col}")
+            if val is None:
+                continue
+            year_map[ej + lead][ej] = val
+    return year_map
+
+
+def _drift_delta(year_map: dict) -> tuple[float, float, list]:
+    """Summiert je Kalenderjahr (juengste Edition - fruehste Edition) ueber alle Jahre,
+    die in >=2 Editionen vorkommen. Gibt (delta_summe, fruehste_summe, betroffene_jahre)."""
+    delta_sum = 0.0
+    earliest_sum = 0.0
+    betroffene_jahre = []
+    for jahr, by_edition in year_map.items():
+        if len(by_edition) < 2:
+            continue
+        editionen_sorted = sorted(by_edition.items())  # (edition_jahr, wert), aufsteigend
+        fruehester_wert = editionen_sorted[0][1]
+        juengster_wert = editionen_sorted[-1][1]
+        delta = juengster_wert - fruehester_wert
+        if abs(delta) > 0.5:  # Rundungsrauschen ignorieren
+            delta_sum += delta
+            earliest_sum += fruehester_wert
+            betroffene_jahre.append(jahr)
+    return delta_sum, earliest_sum, sorted(betroffene_jahre)
+
+
+def make_investitionsprojekte(con) -> dict | None:
+    """
+    Exportiert den Investitionsplan (Projekt-Ebene, aus pipeline_investitionsplan.py)
+    fuer den Investitionen-Tab: Eigenanteil vs. Foerdermittel je Massnahme, plus
+    Jahres-Prognose-Drift zur Erkennung von Kostensteigerungen/Terminverzug.
+    Gibt None zurueck, wenn die Tabellen noch nicht existieren oder leer sind.
+    """
+    try:
+        count = con.execute("SELECT COUNT(*) FROM investitionsmassnahmen").fetchone()[0]
+        if count == 0:
+            return None
+    except Exception:
+        return None
+
+    produkt_tp = {
+        r[0]: r[1]
+        for r in con.execute(
+            "SELECT p.produkt_nummer, t.nummer FROM produkte p "
+            "JOIN teilplaene t ON p.teilplan_id = t.id"
+        )
+    }
+
+    editionen_by_massnahme: dict[int, list] = defaultdict(list)
+    for r in con.execute("""
+        SELECT id, massnahme_id, hh_plan_jahr, bezeichnung, erlaeuterung, gesperrt,
+               ein_ansatz, ein_planwert_j1, ein_planwert_j2, ein_planwert_j3, ein_bisher, ein_ve, ein_gesamt,
+               aus_ansatz, aus_planwert_j1, aus_planwert_j2, aus_planwert_j3, aus_bisher, aus_ve, aus_gesamt
+        FROM investitionsmassnahmen_editionen
+        ORDER BY massnahme_id, hh_plan_jahr
+    """):
+        editionen_by_massnahme[r["massnahme_id"]].append(dict(r))
+
+    konten_by_edition: dict[int, list] = defaultdict(list)
+    for r in con.execute("""
+        SELECT edition_id, produkt_nummer, konto_nummer, richtung, bezeichnung,
+               ansatz, planwert_j1, planwert_j2, planwert_j3, bisher_bereitgestellt, ve, gesamt
+        FROM investitionsmassnahmen_konten
+    """):
+        konten_by_edition[r["edition_id"]].append(dict(r))
+
+    massnahmen = []
+    for m in con.execute("SELECT id, investitionsnummer, bezeichnung FROM investitionsmassnahmen"):
+        editionen = editionen_by_massnahme.get(m["id"], [])
+        if not editionen:
+            continue
+        letzte = editionen[-1]  # nach hh_plan_jahr sortiert -> letzter Eintrag = neueste Edition
+        erste_jahr = editionen[0]["hh_plan_jahr"]
+
+        letzte_konten = konten_by_edition.get(letzte["id"], [])
+        foerderung_letzte = sum(
+            k["gesamt"] or 0 for k in letzte_konten
+            if k["richtung"] == "EINZAHLUNG" and k["konto_nummer"].startswith("681")
+        )
+        # TP ueber das Produkt der (nach Betrag) groessten Auszahlungs-Kontozeile ableiten
+        aus_konten = [k for k in letzte_konten if k["richtung"] == "AUSZAHLUNG"]
+        tp_nr = None
+        if aus_konten:
+            top_konto = max(aus_konten, key=lambda k: k["gesamt"] or 0)
+            tp_nr = produkt_tp.get(top_konto["produkt_nummer"])
+
+        if letzte["gesperrt"]:
+            status = "gesperrt"
+        elif erste_jahr == letzte["hh_plan_jahr"] == AKTUELLES_INVESTITIONSJAHR:
+            status = "neu"
+        else:
+            status = "aktiv"
+
+        aus_map = _drift_year_map(editionen, "aus")
+        ein_map = _drift_year_map(editionen, "ein")
+        drift_aus, basis_aus, jahre_aus = _drift_delta(aus_map)
+        drift_ein, basis_ein, jahre_ein = _drift_delta(ein_map)
+
+        aus_gesamt = letzte["aus_gesamt"] or 0
+        ein_gesamt = letzte["ein_gesamt"] or 0
+
+        massnahmen.append({
+            "investitionsnummer": m["investitionsnummer"],
+            "bezeichnung": letzte["bezeichnung"] or m["bezeichnung"],
+            "tp_nr": tp_nr,
+            "status": status,
+            "gesperrt": bool(letzte["gesperrt"]),
+            "erlaeuterung": letzte["erlaeuterung"] or "",
+            "erste_edition": erste_jahr,
+            "letzte_edition": letzte["hh_plan_jahr"],
+            "aus_gesamt": round(aus_gesamt),
+            "ein_gesamt": round(ein_gesamt),
+            "foerderung_gesamt": round(foerderung_letzte),
+            "eigenanteil_gesamt": round(aus_gesamt - ein_gesamt),
+            "foerderquote_pct": round(foerderung_letzte / aus_gesamt * 100, 1) if aus_gesamt > 0 else None,
+            "aus_ve": letzte["aus_ve"],
+            "drift_aus_eur": round(drift_aus),
+            "drift_aus_pct": round(drift_aus / basis_aus * 100, 1) if basis_aus > 0 else None,
+            "drift_ein_eur": round(drift_ein),
+            "drift_eigenanteil_eur": round(drift_aus - drift_ein),
+            "drift_jahre": sorted(set(jahre_aus) | set(jahre_ein)),
+            "editionen": [
+                {
+                    "jahr": e["hh_plan_jahr"],
+                    "aus_ansatz": round(e["aus_ansatz"] or 0),
+                    "aus_planwert_j1": round(e["aus_planwert_j1"] or 0),
+                    "aus_planwert_j2": round(e["aus_planwert_j2"] or 0),
+                    "aus_planwert_j3": round(e["aus_planwert_j3"] or 0),
+                    "aus_bisher": round(e["aus_bisher"] or 0),
+                    "aus_gesamt": round(e["aus_gesamt"] or 0),
+                    "ein_gesamt": round(e["ein_gesamt"] or 0),
+                    "gesperrt": bool(e["gesperrt"]),
+                }
+                for e in editionen
+            ],
+            "konten": [
+                {
+                    "konto_nummer": k["konto_nummer"],
+                    "produkt_nummer": k["produkt_nummer"],
+                    "richtung": k["richtung"],
+                    "bezeichnung": k["bezeichnung"],
+                    "gesamt": round(k["gesamt"] or 0),
+                }
+                for k in letzte_konten
+            ],
+        })
+
+    aktuelle = [m for m in massnahmen if m["letzte_edition"] == AKTUELLES_INVESTITIONSJAHR]
+    gesamtvolumen = sum(m["aus_gesamt"] for m in aktuelle)  # Hinweis: "Gesamt Invest." je Massnahme, nicht nur Ansatz-Jahr
+    foerderung_summe = sum(m["foerderung_gesamt"] for m in aktuelle)
+
+    kostenentwicklung = sorted(
+        (m for m in massnahmen if m["drift_aus_eur"] != 0),
+        key=lambda m: m["drift_aus_eur"], reverse=True
+    )[:20]
+
+    return {
+        "aktuelles_jahr": AKTUELLES_INVESTITIONSJAHR,
+        "kpis": {
+            "anzahl_aktuell": len(aktuelle),
+            "gesamtvolumen": round(gesamtvolumen),
+            "foerderung_summe": round(foerderung_summe),
+            "foerderquote_pct": round(foerderung_summe / gesamtvolumen * 100, 1) if gesamtvolumen > 0 else None,
+            "anzahl_gesperrt": sum(1 for m in aktuelle if m["gesperrt"]),
+            "anzahl_neu": sum(1 for m in aktuelle if m["status"] == "neu"),
+            "anzahl_mit_kreditkontingent": sum(1 for m in aktuelle if (m["aus_ve"] or 0) > 0),
+        },
+        "massnahmen": massnahmen,
+        "kostenentwicklung": kostenentwicklung,
+    }
 
 
 if __name__ == "__main__":
