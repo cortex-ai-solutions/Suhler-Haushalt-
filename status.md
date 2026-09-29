@@ -4,14 +4,17 @@
 ## Meta
 id: haushalt-suhl
 status: dev
-lastUpdate: 2026-09-16
+lastUpdate: 2026-09-29
 monthlyRevenue: 0
 monthlyRunningCost: 0
 
 ## Nächste Aktionen
 - [x] Investitionsplan-Drilldown: 9. Tab "Investitionen" — Projekt-Ebene Eigenanteil vs.
       Fördermittel + Kostenentwicklungs-Ranking (Jahres-Prognose-Drift 2023–2026), auf
-      Stadtrats-Anfrage (2026-09-29). Lokal getestet (Playwright, 0 Console-Errors), Push steht aus.
+      Stadtrats-Anfrage. Committet + gepusht (445e070, 23525eb). Umfassender Validitäts-Pruflauf
+      (2026-09-29): 2026-Zahlen zweifach kreuzvalidiert und exakt; 2023/2025 zeigen eine durch
+      die PDF-Quelle selbst dokumentierte, unvollständige Kleinmaßnahmen-Erfassung (kein Bug) —
+      Details in Projekt-Memory `project_investitionsplan_fund.md`.
 - [ ] HH-Plan 2024 PDF beschaffen → Stellenplan 2023 ergänzen
 - [ ] HSK Stufe 3: Zielerreichungsquote implementieren (ab_haushaltsjahr als Baseline)
 - [ ] 17 HSK-Maßnahmen ohne TP-Zuordnung manuell zuweisen (FALLBACK_TP_MAP)
@@ -113,8 +116,8 @@ unverändert exakt, `haushaltswerte` nicht berührt. Lokal committet, **Push ste
 dokumentiert (Phantom-Records durch Fußnotentext, s. Offene Punkte) — nicht behoben, da
 außerhalb des heutigen Scopes und aktuell folgenlos für die Live-DB.
 
-**Stand 2026-09-29: Investitionsplan-Drilldown (9. Tab "Investitionen") gebaut, getestet, nicht
-gepusht.** Stadtrat wünschte Möglichkeit, in städtische Investitionsleistungen "einzutauchen"
+**Stand 2026-09-29: Investitionsplan-Drilldown (9. Tab "Investitionen") gebaut, getestet,
+validiert, live.** Stadtrat wünschte Möglichkeit, in städtische Investitionsleistungen "einzutauchen"
 (Eigenanteil vs. akquirierte Fördermittel) sowie Kostenüberziehungs-Monitoring. Fund: HH-Plan-PDFs
 enthalten bereits einen vollständigen Investitionsplan nach Investitionsnummern (eigener
 Gliederungspunkt "4.", ~30 Seiten je Jahrgang, seit mind. 2023) — bisher nie geparst. Neu gebaut:
@@ -125,7 +128,21 @@ generate_json.py (implementiert Jahres-Prognose-Drift-Methode: vergleicht densel
 Wert über mehrere Editionen hinweg statt naivem Gesamt-Vergleich, robust gegen den 4-Jahres-
 Rollfenster-Effekt der Tabelle), `patch_investitionen_tab.py` (neuer Dashboard-Tab: KPI-Chips,
 Kostenentwicklungs-Ranking, filterbare Massnahmen-Tabelle mit Förderquote-Balken, Detail-Accordion).
-Lokal mit Playwright getestet (0 Console-Errors, alle Tabs geprüft). Details siehe Projekt-Memory
-`project_investitionsplan_fund.md`. **Nichts committet/gepusht/deployed** — wartet auf Freigabe.
+Lokal mit Playwright getestet (0 Console-Errors, alle Tabs geprüft). Nutzer-Rückfrage
+("Stimmen die Zahlen? Was wurde 2026 investiert?") deckte auf, dass die ursprüngliche KPI
+"Investitionsvolumen" (91,6 Mio.€) die Lebenszeit-Gesamtkosten aller Maßnahmen zeigte statt der
+2026-Auszahlung selbst — gefixt (Commit `23525eb`): neue prominente Kachel "Auszahlung 2026
+(Ansatz): 7.798.730 €" plus eigene Tabellenspalte, Default-Sortierung umgestellt.
+
+Anschließend umfassender Validitäts-Pruflauf (Kreuzabgleich Pipeline vs. volle
+`haushaltswerte`-Tabelle, Strukturprüfung DB, Plausibilitätschecks JSON): 2026-Zahlen zweifach
+unabhängig bestätigt und exakt. 2023/2025 zeigen eine durch die PDF-Quelle selbst dokumentierte
+Lücke (Kleinmaßnahmen unter ~60 T€ werden im Investitionsplan-Abschnitt gar nicht einzeln
+aufgeführt) — betrifft nicht 2026 und nicht die Validität der Kostendrift-Analyse (vergleicht
+immer dieselbe Maßnahme mit sich selbst). Keine Code-Korrektur nötig. Details siehe Projekt-Memory
+`project_investitionsplan_fund.md`.
+
+**Committet + gepusht:** `445e070` (Feature) und `23525eb` (Ansatz/Gesamt-Klarstellung), beide auf
+master, live auf GitHub Pages.
 
 **Elestio-Infrastruktur (Stand 2026-08-05):** Skill-Katalog wird von Orsi nur beim Gateway-Boot gescannt (kein Hot-Reload) — jede Skill-Änderung (budget_query.py, SKILL.md) erfordert Container-Neustart (`kill <gateway-PID>`, RestartPolicy: always fängt das auf). SKILL.md (Frontmatter-`description`) steuert, ob Orsi einen Skill überhaupt erwägt; separat davon liest Orsi Wissen aus eigenen Memory-Dateien (`/home/node/.openclaw/workspace/memory/memory_budget_suhl.md`, live pro Anfrage gelesen, kein Neustart nötig) — beide lokal versioniert unter `skill/SKILL.md` und `skill/memory_budget_suhl.md`. app-openclaw-gateway-1 hostet NICHT nur Orsi, sondern auch den bodyfit-lead-analyzer-Telegram-Listener (Kopplungsrisiko, siehe Offene Punkte). Server hat insgesamt 7 Container (Orsi, bodyfit-app/-db/-lead-agent/-caddy, ssb-ar-portal, elestio-nginx/-postfix), 2 vCPU/3,7GB RAM, ~2,4GB frei.
