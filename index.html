@@ -917,16 +917,21 @@
 <div id="tab-investitionen" class="hidden">
 
   <!-- KPI-Chips -->
-  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+  <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+    <div class="card p-4 border border-blue-800/40">
+      <div class="kpi-label">Auszahlung <span id="inv-kpi-jahr-label"></span> (Ansatz)</div>
+      <div class="kpi-value text-blue-300" id="inv-kpi-ansatz">&ndash;</div>
+      <div class="note mt-1">tats&auml;chlich in diesem Haushaltsjahr geplante Investitions-Auszahlung</div>
+    </div>
     <div class="card p-4">
-      <div class="kpi-label">Investitionsvolumen</div>
+      <div class="kpi-label">Gesamtkosten aller Ma&szlig;nahmen</div>
       <div class="kpi-value text-slate-200" id="inv-kpi-volumen">&ndash;</div>
-      <div class="note mt-1"><span id="inv-kpi-n" class="text-blue-400"></span> Ma&szlig;nahmen im aktuellen Haushaltsplan</div>
+      <div class="note mt-1"><span id="inv-kpi-n" class="text-blue-400"></span> Ma&szlig;nahmen &uuml;ber deren gesamte (oft mehrj&auml;hrige) Laufzeit</div>
     </div>
     <div class="card p-4">
       <div class="kpi-label">F&ouml;rdermittel akquiriert</div>
       <div class="kpi-value text-emerald-300" id="inv-kpi-foerderung">&ndash;</div>
-      <div class="note mt-1"><span id="inv-kpi-foerderquote" class="text-emerald-400"></span> F&ouml;rderquote am Gesamtvolumen</div>
+      <div class="note mt-1"><span id="inv-kpi-foerderquote" class="text-emerald-400"></span> F&ouml;rderquote &uuml;ber die gesamte Laufzeit</div>
     </div>
     <div class="card p-4">
       <div class="kpi-label">Gesperrte Ma&szlig;nahmen</div>
@@ -1002,6 +1007,7 @@
           <tr class="text-left text-slate-400 text-xs border-b border-slate-700">
             <th class="py-2 pr-3 font-medium">Ma&szlig;nahme</th>
             <th class="py-2 pr-3 font-medium w-14">TP</th>
+            <th class="py-2 pr-3 font-medium text-right w-24">Ansatz <span id="inv-th-jahr"></span></th>
             <th class="py-2 pr-3 font-medium text-right w-28">Gesamt (Invest.)</th>
             <th class="py-2 pr-3 font-medium w-40">Eigenanteil / F&ouml;rderung</th>
             <th class="py-2 font-medium w-20">Status</th>
@@ -1106,7 +1112,7 @@ function switchYear(jahr) {
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────
-fetch("budget_data.json?v=20260929a")
+fetch("budget_data.json?v=20260929b")
   .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
   .then(d => { DATA = d; init(); })
   .catch(e => {
@@ -4685,6 +4691,9 @@ function renderInvestitionen() {
   _invRendered = true;
 
   var k = IP.kpis;
+  setText("inv-kpi-jahr-label", IP.aktuelles_jahr);
+  setText("inv-th-jahr", IP.aktuelles_jahr);
+  setText("inv-kpi-ansatz", invFmtEur(k.ansatz_summe));
   setText("inv-kpi-volumen", invFmtEur(k.gesamtvolumen));
   setText("inv-kpi-n", k.anzahl_aktuell);
   setText("inv-kpi-foerderung", invFmtEur(k.foerderung_summe));
@@ -4735,7 +4744,7 @@ function renderInvTable() {
     if (_invTpFilter && m.tp_nr !== _invTpFilter) return false;
     if (query && m.bezeichnung.toLowerCase().indexOf(query) === -1 && m.investitionsnummer.indexOf(query) === -1) return false;
     return true;
-  }).sort(function(a, b) { return b.aus_gesamt - a.aus_gesamt; });
+  }).sort(function(a, b) { return b.aus_ansatz_aktuell - a.aus_ansatz_aktuell; });
 
   var rows = filtered.map(function(m) {
     var sc = STATUS_COLOR[m.status] || "text-slate-400";
@@ -4758,17 +4767,18 @@ function renderInvTable() {
       "<td class=\"py-2 pr-3\"><div class=\"text-slate-200 text-sm\">" + escHtml(m.bezeichnung) + "</div>" +
       "<div class=\"text-xs text-slate-500 font-mono\">" + m.investitionsnummer + "</div></td>" +
       "<td class=\"py-2 pr-3 text-slate-400 font-mono text-xs\">" + (m.tp_nr || "\u2013") + "</td>" +
+      "<td class=\"py-2 pr-3 text-right font-mono text-xs " + (m.aus_ansatz_aktuell > 0 ? "text-blue-300" : "text-slate-600") + "\">" + invFmtEur(m.aus_ansatz_aktuell) + "</td>" +
       "<td class=\"py-2 pr-3 text-right font-mono text-xs text-slate-200\">" + invFmtEur(m.aus_gesamt) + "</td>" +
       "<td class=\"py-2 pr-3\">" + foerderBar + "</td>" +
       "<td class=\"py-2\"><span class=\"text-xs px-1.5 py-0.5 rounded " + sc + "\">" + (STATUS_LABEL[m.status] || m.status) + "</span></td>" +
       "</tr>",
       "<tr id=\"inv-detail-" + m.investitionsnummer + "\" class=\"hidden bg-slate-900/50\">" +
-      "<td colspan=\"5\" class=\"px-4 py-3\">" + buildInvDetail(m) + "</td></tr>",
+      "<td colspan=\"6\" class=\"px-4 py-3\">" + buildInvDetail(m) + "</td></tr>",
     ];
   });
 
   document.getElementById("inv-tabelle-body").innerHTML = rows.length ? rows.flat().join("") :
-    "<tr><td colspan=\"5\" class=\"py-4 text-center text-slate-500 text-xs\">Keine Ma\u00dfnahmen gefunden.</td></tr>";
+    "<tr><td colspan=\"6\" class=\"py-4 text-center text-slate-500 text-xs\">Keine Ma\u00dfnahmen gefunden.</td></tr>";
 }
 
 function buildInvDetail(m) {

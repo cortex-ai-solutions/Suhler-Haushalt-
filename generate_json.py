@@ -1408,6 +1408,10 @@ def make_investitionsprojekte(con) -> dict | None:
             k["gesamt"] or 0 for k in letzte_konten
             if k["richtung"] == "EINZAHLUNG" and k["konto_nummer"].startswith("681")
         )
+        foerderung_ansatz = sum(
+            k["ansatz"] or 0 for k in letzte_konten
+            if k["richtung"] == "EINZAHLUNG" and k["konto_nummer"].startswith("681")
+        )
         # TP ueber das Produkt der (nach Betrag) groessten Auszahlungs-Kontozeile ableiten
         aus_konten = [k for k in letzte_konten if k["richtung"] == "AUSZAHLUNG"]
         tp_nr = None
@@ -1429,6 +1433,8 @@ def make_investitionsprojekte(con) -> dict | None:
 
         aus_gesamt = letzte["aus_gesamt"] or 0
         ein_gesamt = letzte["ein_gesamt"] or 0
+        aus_ansatz_aktuell = letzte["aus_ansatz"] or 0
+        ein_ansatz_aktuell = letzte["ein_ansatz"] or 0
 
         massnahmen.append({
             "investitionsnummer": m["investitionsnummer"],
@@ -1439,11 +1445,19 @@ def make_investitionsprojekte(con) -> dict | None:
             "erlaeuterung": letzte["erlaeuterung"] or "",
             "erste_edition": erste_jahr,
             "letzte_edition": letzte["hh_plan_jahr"],
+            # "_gesamt"-Felder = Gesamtkosten der Massnahme ueber ihre GESAMTE Laufzeit
+            # (bisher bereitgestellt + 4-Jahres-Planungsfenster), NICHT nur das aktuelle Jahr.
             "aus_gesamt": round(aus_gesamt),
             "ein_gesamt": round(ein_gesamt),
             "foerderung_gesamt": round(foerderung_letzte),
             "eigenanteil_gesamt": round(aus_gesamt - ein_gesamt),
             "foerderquote_pct": round(foerderung_letzte / aus_gesamt * 100, 1) if aus_gesamt > 0 else None,
+            # "_ansatz_aktuell"-Felder = nur die Auszahlung/Einzahlung IM aktuellen Haushaltsjahr
+            # (Antwort auf "was wird <Jahr> tatsaechlich investiert").
+            "aus_ansatz_aktuell": round(aus_ansatz_aktuell),
+            "ein_ansatz_aktuell": round(ein_ansatz_aktuell),
+            "foerderung_ansatz_aktuell": round(foerderung_ansatz),
+            "eigenanteil_ansatz_aktuell": round(aus_ansatz_aktuell - ein_ansatz_aktuell),
             "aus_ve": letzte["aus_ve"],
             "drift_aus_eur": round(drift_aus),
             "drift_aus_pct": round(drift_aus / basis_aus * 100, 1) if basis_aus > 0 else None,
@@ -1477,7 +1491,10 @@ def make_investitionsprojekte(con) -> dict | None:
         })
 
     aktuelle = [m for m in massnahmen if m["letzte_edition"] == AKTUELLES_INVESTITIONSJAHR]
-    gesamtvolumen = sum(m["aus_gesamt"] for m in aktuelle)  # Hinweis: "Gesamt Invest." je Massnahme, nicht nur Ansatz-Jahr
+    # Zwei unterschiedliche Summen, bewusst getrennt (siehe Feld-Kommentare oben):
+    ansatz_summe = sum(m["aus_ansatz_aktuell"] for m in aktuelle)          # was <Jahr> TATSAECHLICH ausgezahlt wird
+    foerderung_ansatz_summe = sum(m["foerderung_ansatz_aktuell"] for m in aktuelle)
+    gesamtvolumen = sum(m["aus_gesamt"] for m in aktuelle)                 # Gesamtkosten aller (auch mehrjaehrigen) Massnahmen
     foerderung_summe = sum(m["foerderung_gesamt"] for m in aktuelle)
 
     kostenentwicklung = sorted(
@@ -1489,6 +1506,9 @@ def make_investitionsprojekte(con) -> dict | None:
         "aktuelles_jahr": AKTUELLES_INVESTITIONSJAHR,
         "kpis": {
             "anzahl_aktuell": len(aktuelle),
+            "ansatz_summe": round(ansatz_summe),
+            "foerderung_ansatz_summe": round(foerderung_ansatz_summe),
+            "foerderquote_ansatz_pct": round(foerderung_ansatz_summe / ansatz_summe * 100, 1) if ansatz_summe > 0 else None,
             "gesamtvolumen": round(gesamtvolumen),
             "foerderung_summe": round(foerderung_summe),
             "foerderquote_pct": round(foerderung_summe / gesamtvolumen * 100, 1) if gesamtvolumen > 0 else None,
