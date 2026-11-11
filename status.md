@@ -4,7 +4,7 @@
 ## Meta
 id: haushalt-suhl
 status: dev
-lastUpdate: 2026-09-29
+lastUpdate: 2026-11-11
 monthlyRevenue: 0
 monthlyRunningCost: 0
 
@@ -15,6 +15,7 @@ monthlyRunningCost: 0
       (2026-09-29): 2026-Zahlen zweifach kreuzvalidiert und exakt; 2023/2025 zeigen eine durch
       die PDF-Quelle selbst dokumentierte, unvollständige Kleinmaßnahmen-Erfassung (kein Bug) —
       Details in Projekt-Memory `project_investitionsplan_fund.md`.
+- [x] Neuer Punkt „Förderung & Vergabe (Entwurf)“ (aus dem Förderlotsen, dort bisher Reiter „Stadt als Bauherr“): Förderstand je Investitionsnummer mit Beleg, Förder-Konfliktbericht B1–B8, TED-Vergaben, Vergabe-Lotse; als ungeprüfter Entwurf gekennzeichnet öffentlich (Freigabe Tobias 11.11.2026), zusammen mit Filter „Förderpotenzial“ im Reiter Investitionen. Daten wöchentlich per export_haushalt.py aus foerderprogramme-suhl (2026-11-11)
 - [ ] HH-Plan 2024 PDF beschaffen → Stellenplan 2023 ergänzen
 - [ ] HSK Stufe 3: Zielerreichungsquote implementieren (ab_haushaltsjahr als Baseline)
 - [ ] 17 HSK-Maßnahmen ohne TP-Zuordnung manuell zuweisen (FALLBACK_TP_MAP)
